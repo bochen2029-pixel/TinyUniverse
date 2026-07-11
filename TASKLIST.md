@@ -69,10 +69,17 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(deferred → M7, declared)* roaming 3D bubbles in the live universe (spawn-on-isolation, live Ratchet-collapse binding, bubbleVis); live batched-FFT budget probe
 - **Gate: MET** — interference emerges one particle at a time and dies under observation; every quantum number oracle-checked.
 
-## M7 · `cosmos` — the tiny planet
-- ☐ 3-torus wrap (forces + light); light-history ring buffer ("see your own past")
-- ☐ Stereographic little-planet projection; scale factor a(t) cosmology mode
-- **Gate:** the signature screenshot — the universe as a globe, lensed, self-visible.
+## M7 · `cosmos` — the tiny planet ☑ **CLOSED 2026-07-11**
+- ☑ Contract frozen (`contracts/cosmos.contract.md` v1.0.0); frame contract → v1.1.0 (canonical-range clause + live bubble handle)
+- ☑ 3-torus live: canonical coordinates `[−256,256)` in `kDriftK` (exact ±512, Kahan-safe), minimum-image in direct/BH kernels, BH positions wrap. PM field periodic since M2 — coordinates now agree with it
+- ☑ `circumnav` golden `3f18f02c`: photon laps the universe **twice** and returns to 3.1e-5 su; 0.5c particle laps once (1.5e-5 su); SR clock τ=44.34 to 5.5e-5; photon τ **exactly 0** (D-019 fp32 leak caught + fixed)
+- ☑ `expand` golden `ce448f2b`: EdS comoving cosmology on the PM machinery (Green ×1/a, drift ×1/a², Zel'dovich lattice) — **linear growth D ∝ a measured**: slope 0.988, amplitude ratio 0.7% vs a_end 1.927, H₀=0.011173
+- ☑ `bubbles` golden `78b753f1`: roaming 3D quantum bubbles (64³ batched split-step) — spawn on PM-isolation (8/8), free-packet σ to **0.57%** of the analytic law, collapse by Ratchet intrusion (4 collapsed / 4 alive), RECORDED particles stay classical
+- ☑ Light-history ring (retarded-time sampling, "see your own past"), 27-image torus splat, **stereographic little-planet projection**, bubbleVis ψ-glow — all non-declared, CINEMATIC-gated
+- ☑ 5 goldens superseded (D-019: cloud/galaxy/merger/collapse seam-crossing ejecta + photons τ-fix), physics gates re-verified pass; 13 byte-identical incl. the echo; **21/21 GREEN**
+- ☑ Perf: 1M windowed galaxy with 27-image splat + history **225 fps avg / 58 min**; CINEMATIC §7 10/10 (little-planet, lensed, bubbles shots in `runs/cosmos_*.png`)
+- ☐ *(deferred → backlog)* Φ-coupled bubbles (V=0 free evolution v1); moving bubble window; a(t) little-planet timelapse video; light-history for BH/bubble glows
+- **Gate: MET** — the universe is a globe, wrapped and lensed and self-visible; cosmology's linear growth is a frozen number; quantum bubbles roam and collapse; every regime golden a stranger runs cold.
 
 ## Backlog (measured adoption only; each needs an honest baseline)
 - ☐ DLSS 4.5 via Streamline · ☐ RTXDI/ReSTIR emissive-particle lighting · ☐ NRD · ☐ Slang port of shared math (D-008) · ☐ UE 5.8 TextureShare showcase shell · ☐ MCP surface for scenario driving · ☐ df64 zoom ladder (D-010 gate)

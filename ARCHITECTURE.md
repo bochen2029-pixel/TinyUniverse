@@ -135,7 +135,7 @@ ADRs in `DECISIONS.md`. Summary: CUDA 13.1 · sm_89 (fat binary sm_89+sm_90 SASS
 | einstein | CUDA | γ/τ/1PN/photons/2.5PN | astra_nexus formulas | nexus N3/N7/N8/N9 | planned (M4) |
 | gargantua | CUDA(/OptiX) | BH entities, P–W disks, Hawking, lensed view | blackhole.cu (lift) | nexus N4 + analytic Kerr | planned (M5) |
 | planck | CUDA (cuFFT) | quantum bubbles + inscription collapse | new | nexus N5 | planned (M6) |
-| cosmos | CUDA | torus, little-planet, light history, a(t) | new | wrap/consistency gates | planned (M7) |
+| cosmos | CUDA | torus wrap, little-planet, light history, a(t), roaming bubbles | new | circumnav/expand/bubbles + wrap consistency | **CLOSED (M7) — 21/21 green** |
 
 Shared infrastructure (not a module): `core/lib/` — the liborrery lift (D-005), KAT-selftested, verbatim.
 

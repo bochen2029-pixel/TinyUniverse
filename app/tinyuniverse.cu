@@ -1425,6 +1425,7 @@ static int  gBubLive = 0;
 static double gBubSig = 0, gBubSigExp = 0;
 // M7 cosmos: projection + light-history host state (visuals non-declared)
 static int  gProj = 0;                                // 0 perspective, 1 little planet
+static float gShotAz = -999, gShotEl = -999, gShotDist = -999;   // shot framing overrides
 static ushort4 *dHistBuf = 0;
 static int  gHistDepth = 0, gHistN = 0, gHistHead = -1;
 static bool gHistOn = false, gWantHist = true;        // false in the headless json/golden face
@@ -2796,6 +2797,10 @@ int main(int argc, char** argv){
         else if (a == "--aces")                 gTonemap = 1;
         else if (a == "--bubbles")              gBubWant = true;   // live-universe bubbles (declared)
         else if (a == "--planet")               gProj = 1;         // little-planet projection
+        else if (a == "--az" && i+1 < argc)     gShotAz = (float)atof(argv[++i]);   // shot framing
+        else if (a == "--el" && i+1 < argc)     gShotEl = (float)atof(argv[++i]);
+        else if (a == "--dist" && i+1 < argc)   gShotDist = (float)atof(argv[++i]);
+        else if (a == "--ev" && i+1 < argc)     gEvOffset = (float)atof(argv[++i]);
         else if (a == "--bench" && i+1 < argc)  benchFrames = atoi(argv[++i]);
         else if (a == "--shot" && i+1 < argc)   shotPath = argv[++i];
         else if (a == "--frames" && i+1 < argc) shotFrames = atoi(argv[++i]);
@@ -3271,6 +3276,9 @@ int main(int argc, char** argv){
 
     if (shotPath){                                    // headless render-to-BMP
         applyPreset(0);
+        if (gShotAz   > -998) cAz.tgt = gShotAz;
+        if (gShotEl   > -998) cEl.tgt = gShotEl;
+        if (gShotDist > -998) cDist.tgt = logf(gShotDist);
         cAz.cur = cAz.tgt; cEl.cur = cEl.tgt; cDist.cur = cDist.tgt;
         while (warmTicks > 0){                        // evolve before the beauty pass
             int nt = (int)(warmTicks < 250 ? warmTicks : 250);

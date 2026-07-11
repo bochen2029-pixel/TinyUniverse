@@ -57,5 +57,6 @@ Declared (golden-hashable): pos/mom/tau/regime at tick T, conserved-quantity met
 
 ## Changelog
 
+- **v1.1.0 (2026-07-11)** — MINOR at M7 (cosmos): **pos canonical-range clause** — live massive positions are wrapped into `[−L/2, L/2)` per axis every tick (the `±512` shift is exact fp32, hence bit-reversible; the Loschmidt echo survives — D-019). Minimum-image convention declared for all pairwise separations. The per-particle **`bubble` handle goes live** (0 = none, slot+1 = roaming 3D ψ-bubble; owner's classical drift + τ suspend for the episode — declared τ-gap). Light-history ring, little-planet projection, and bubbleVis are non-declared render clauses (never touch a golden). Back-compatible: every pre-M7 non-crossing declared state is byte-identical.
 - **v1.0.0 (2026-07-11)** — frozen at M1: Q-001 → god-hand v1; regime canonical hex table (nexus N10 values); emitT packed into pos.w, mass into mom.w; presentation-layer clause added (D-012: P0 GL blit interim, P1 Vulkan committed); tick budget rule.
 - **v0.1.0-DRAFT (2026-07-11)** — shape review draft.

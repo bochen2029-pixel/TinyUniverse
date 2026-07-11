@@ -1,3 +1,19 @@
+# MODULE — app (tinyuniverse v0.5.0 "cosmos")
+
+## M7 addendum (2026-07-11)
+
+v0.5.0 adds the tiny planet per `contracts/cosmos.contract.md` (frame contract → v1.1.0). Three new scenarios/goldens: `circumnav` (`3f18f02c` — photon laps the torus ×2, returns to 3.1e-5 su; photons structurally ageless, D-019) · `expand` (`ce448f2b` — EdS comoving cosmology on the PM solver, linear growth slope 0.988) · `bubbles` (`78b753f1` — roaming 3D 64³ split-step bubbles, spawn-on-isolation, free-packet σ to 0.57%, Ratchet collapse 4/8). Torus wrap is always-on: `kDriftK` canonicalizes positions to `[−256,256)` (exact ±512, Kahan-safe), `mimg()` minimum-image in direct/BH kernels. 5 pre-M7 goldens superseded (seam-crossing ejecta + the photon-τ fix, D-019), 13 byte-identical incl. the echo. **21/21 GREEN.**
+
+**New render paths (non-declared, CINEMATIC §7 10/10):** stereographic **little-planet projection** (`--planet` / key `L`; `projCam()` shared by splat/BH/bubble) · **27-image torus splat** (`kSplat` iterates {−1,0,1}³ box images by minimum-image) · **light-history ring** (`dHistBuf`, half4 snapshots every 24 ticks, adaptive depth ≤40% free VRAM, retarded-time sample at `t−D/c` with one refinement — "see your own past"; never allocated in the headless golden path) · **bubbleVis** (`kSplatPsi` — |ψ|² volume splat as a hot quantum glow). Shot-framing flags added: `--az/--el/--dist/--ev`. Gate: **225 fps avg / 58 min** windowed 1M/1080p with the 27-image splat + history live; evidence `runs/cosmos_littleplanet.png` (the globe), `runs/cosmos_planet_lensed.png` (BH Einstein ring on the little planet), `runs/cosmos_bubbles.png`, `runs/cosmos_planet_collapse.png`.
+
+Build unchanged from M6 (now also links `cuda_fp16.h`, header-only):
+```
+nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\tinyuniverse.exe app\tinyuniverse.cu core\lib\envelope.cpp user32.lib gdi32.lib opengl32.lib cufft.lib
+```
+Everything below documents earlier milestones and remains true.
+
+---
+
 # MODULE — app (tinyuniverse v0.2.0 "newton")
 
 ## M2 addendum (2026-07-11)

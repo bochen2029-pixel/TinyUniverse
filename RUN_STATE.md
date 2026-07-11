@@ -1,6 +1,26 @@
 # RUN_STATE.md
 
-**As of:** 2026-07-11 · **Milestone:** M7 `cosmos` (PHYSICS GREEN, art pass in flight) · **State:** contract frozen (`contracts/cosmos.contract.md` v1.0.0) · torus wrap always-on + min-image everywhere · **21/21 goldens GREEN in 105 s** (3 new: circumnav `3f18f02c` · expand `ce448f2b` · bubbles `78b753f1`; 5 superseded under wrap/D-019: cloud galaxy merger collapse photons; 13 byte-identical incl. the echo). Next concrete action: little-planet + light-history signature shot → CINEMATIC gate → docs close.
+**As of:** 2026-07-11 · **Milestone:** M7 `cosmos` **CLOSED** — the universe is a globe. **State:** THE REGIME LADDER + THE WORLD ARE BOTH COMPLETE. **21/21 goldens GREEN** (~105 s idle card). App v0.5.0 "cosmos": 20 scenarios. Contracts: + cosmos v1.0.0; frame → v1.1.0.
+
+## What M7 established
+
+- **Topology is live and exact.** Space is a 3-torus in coordinates, not just in the force field: `kDriftK` wraps positions into `[−256,256)` (the ±512 shift is a power-of-two, bit-reversible — the Loschmidt echo stayed byte-identical through it, D-019), minimum-image separations everywhere. `circumnav` `3f18f02c`: a photon laps the universe twice and comes home to 3.1e-5 su; photons are now **structurally ageless** (τ≡0) after an fp32 clamp-leak fix the gate caught.
+- **Cosmology is a frozen number.** `expand` `ce448f2b`: Einstein–de Sitter comoving expansion on the existing PM solver (Green ×1/a, drift ×1/a², Zel'dovich growing mode) reproduces **linear growth D ∝ a** — slope 0.988, amplitude ratio 0.7% at a_end=1.927.
+- **Quantum went roaming.** `bubbles` `78b753f1`: 64³ batched split-step bubbles spawn on PM-isolation (8/8), spread at the free-packet σ(t) to **0.57%**, and collapse by M3 Ratchet intrusion (4 collapsed / 4 alive). RECORDED particles stay classical.
+- **The namesake shot shipped.** Stereographic little-planet projection + 27-image torus splat + light-history retarded-time sampling + bubbleVis ψ-glow, all non-declared, CINEMATIC §7 10/10. `runs/cosmos_littleplanet.png` (the globe), `runs/cosmos_planet_lensed.png` (a BH's Einstein ring on the little planet), `runs/cosmos_bubbles.png`. Perf: **225 fps avg / 58 min** windowed 1M with the 27-image splat + history.
+
+## Next — operator's call (both doors open, one directive away)
+
+- **v2 SUBSTRATE** (`docs/PROPOSAL_2026-07-12_v2_substrate.md`, operator-review pending): the one-field rewrite. First act on "go substrate": `contracts/substrate_nexus.contract.md` + build N0 (CPU fp64 spherical EKG, **Choptuik γ** golden — no GPU needed).
+- **v1 polish backlog:** a(t) little-planet cosmology timelapse video · Φ-coupled bubbles · P1 Vulkan/ImGui · GARGANTUA per-pixel Kerr geodesic art pass · 2.5PN · Q-006.
+
+## Chores carried (from M0–M6)
+
+P1 Vulkan (SDK) · ImGui · TAA · clang/g++ nexus parity · art pass (Kerr geodesic view + OptiX spike → ORRERY `lens`) · cufft64 dll packaging · P³M/spatial hash · Q-006 · 2.5PN.
+
+## Standing context
+
+The regime ladder is COMPLETE (beauty → gravity → arrow → relativity → black holes → quantum) **and the world is complete** (wrapped, expanding, self-visible, roaming-quantum). Every physics claim a stranger reproduces cold from BUILD.md. 21 goldens, 8 contracts, ~105 s harness. GPU is shared (preflight exits 3 if <2 GB free; timings on a contended card not citable). Repo docs authoritative over agent memories.
 
 ## What M6 established
 
