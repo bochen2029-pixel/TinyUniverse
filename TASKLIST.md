@@ -2,14 +2,15 @@
 
 Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖ killed (DECISIONS entry).
 
-## M0 · `nexus` — the composition proof *(current)*
-- ☑ Contract drafted: `contracts/nexus.contract.md` + `nexus.schema.json` (v1.0.0-rc1)
-- ☐ **Operator review of contract + dial defaults** ← gate, nothing proceeds past it
-- ☐ Implement `nexus/tiny_nexus.cpp` (C++17, fp64, single file, MSVC/clang/g++ parity)
-- ☐ Battery N1–N11 green; `--selftest`; golden frozen; 3× byte-identical
-- **Gate:** all four regimes step in one scene without contradiction; dial defaults frozen; nexus becomes the standing oracle.
+## M0 · `nexus` — the composition proof ☑ **CLOSED 2026-07-11**
+- ☑ Contract drafted + operator-approved (v1.0.0; errata D-011 applied at implementation)
+- ☑ `nexus/tiny_nexus.cpp` implemented (C++17, fp64, single file, MSVC-built)
+- ☑ Battery N1–N11 green in 24.1 s; golden frozen `ad64f810`; N11 + 3× out-of-process byte-identical
+- ☑ Dial defaults v0 frozen; nexus is the standing oracle
+- ☐ *(owed, moved to M1 chores)* clang++/g++ parity build — no non-MSVC toolchain on this machine
+- **Gate: MET** — all four regimes stepped in one scene, zero contradictions (N10 masks 0x12/0x24/0x1C stable, drifts ≤ 2.4e-13).
 
-## M1 · `canvas` — first light
+## M1 · `canvas` — first light *(current)*
 - ☐ frame.contract.md v1.0.0 (freeze the DRAFT)
 - ☐ Vulkan swapchain + CUDA external-memory interop skeleton (simpleVulkan/Mímir reference)
 - ☐ liborrery lift into `core/lib/` (verbatim, KAT selftest green, pinned ORRERY commit recorded)
