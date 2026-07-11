@@ -1,0 +1,14 @@
+build/
+dist/
+out/
+.vs/
+.vscode/
+__pycache__/
+*.exe
+*.obj
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.log
+*.tmp

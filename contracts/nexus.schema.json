@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "tiny_nexus declared output",
+  "type": "object",
+  "required": ["tool", "version", "seed", "dials", "derived", "results", "verdict"],
+  "properties": {
+    "tool": { "const": "tiny_nexus" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "seed": { "type": "integer" },
+    "dials": {
+      "type": "object",
+      "required": ["m_p", "c", "hbar", "G", "dt", "L_box", "k_B"],
+      "properties": {
+        "m_p": { "type": "number", "exclusiveMinimum": 0 },
+        "c": { "type": "number", "exclusiveMinimum": 0 },
+        "hbar": { "type": "number", "exclusiveMinimum": 0 },
+        "G": { "type": "number", "exclusiveMinimum": 0 },
+        "dt": { "type": "number", "exclusiveMinimum": 0 },
+        "L_box": { "type": "number", "exclusiveMinimum": 0 },
+        "k_B": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "derived": {
+      "type": "object",
+      "required": ["lambda_dB_v1", "r_s_1e5", "r_s_1e2", "v_circ_1e4_r10_over_c", "T_H_1e5", "T_H_1e3"],
+      "additionalProperties": { "type": "number" }
+    },
+    "results": {
+      "type": "array",
+      "minItems": 11,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "pass", "metrics"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^N(1[01]|[1-9])$" },
+          "name": { "type": "string" },
+          "pass": { "type": "boolean" },
+          "metrics": { "type": "object", "additionalProperties": { "type": ["number", "string", "boolean"] } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "verdict": { "enum": ["pass", "fail"] },
+    "notes": { "type": "string", "description": "non-declared; excluded from the golden hash domain" }
+  },
+  "additionalProperties": false
+}
