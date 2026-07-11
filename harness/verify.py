@@ -29,7 +29,28 @@ GOLDENS = [
     ("hawking",   [r"build\tinyuniverse.exe", "--scenario", "hawking",   "--golden"]),
 ]
 
+def gpu_preflight(min_free_mb=2000):
+    # The app needs ~0.8 GB VRAM; a card busy with another workload would fail
+    # cudaMalloc (false RED) or spill to shared memory (garbage timings).
+    # Exit 3 = environment-not-ready: NOT a red golden, never conflate.
+    try:
+        r = subprocess.run(["nvidia-smi", "--query-gpu=memory.free",
+                            "--format=csv,noheader,nounits"],
+                           capture_output=True, text=True, timeout=10)
+        free_mb = int(r.stdout.strip().splitlines()[0])
+    except Exception:
+        print("[preflight] nvidia-smi unavailable - proceeding blind")
+        return True
+    if free_mb < min_free_mb:
+        print(f"[preflight] GPU busy: only {free_mb} MB VRAM free (< {min_free_mb} MB).")
+        print("[preflight] Refusing to run goldens on a contended card. Exit 3.")
+        return False
+    print(f"[preflight] GPU ok: {free_mb} MB VRAM free")
+    return True
+
 def main():
+    if not gpu_preflight():
+        return 3
     if "--build" in sys.argv:
         for cmd in BUILDS:
             print(f"[build] {cmd[:80]}...")
