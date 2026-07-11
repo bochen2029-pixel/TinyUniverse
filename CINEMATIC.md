@@ -31,7 +31,7 @@ Downsample 5–6 mips with 13-tap filter, upsample with 3×3 tent + additive ble
 
 ## 4 · Exposure
 
-Physical camera: exposure in EV, manual override always available (+/− keys, GARGANTUA parity ×1.15 steps). Auto mode: log₂-luminance histogram, meter 2%–98% clip, temporal adaptation τ ≈ 0.5–1.5 s. For extreme-range views (cosmology timelapse), the Ward-Larson histogram-EQ mode (Buddhabrot v4 `k_eq_accum` pattern) is the sanctioned alternative — declared on the HUD when active.
+Physical camera: exposure in EV, manual override always available (+/− keys, GARGANTUA parity ×1.15 steps). Auto mode: log₂-luminance histogram, meter 2%–98% clip, temporal adaptation τ ≈ 0.5–1.5 s. For extreme-range scenes, two sanctioned compressors — both cinematic-mode-only and declared on the HUD: (a) the **astro stretch** (piecewise luminance compression: identity for L ≤ 1, extended Reinhard on L−1 above; first frozen in app v0.1 with W=40) for additive star fields whose in-frame range exceeds the tone mapper's shoulder; (b) Ward-Larson histogram-EQ (Buddhabrot v4 `k_eq_accum` pattern) for timelapse/cosmology views. Physical mode never compresses.
 
 ## 5 · Camera
 

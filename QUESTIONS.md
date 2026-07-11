@@ -1,6 +1,6 @@
 # QUESTIONS.md — open design questions (parked, owned, non-blocking unless marked)
 
-**Q-001 · Player embodiment.** God-hand tools only (pinch/fling/compress/heat/detector-placement), or also an embedded probe ("you are a seat: your camera has a τ")? Affects the input-trace schema — decide before frame.contract v1.0.0 (M1). *Default if undecided: god-hand v1, probe as M7+ mode.*
+**Q-001 · Player embodiment. RESOLVED 2026-07-11 (default taken):** god-hand v1, frozen in frame.contract.md v1.0.0 (input-trace tool enum). Probe-mode ("your camera is a seat with a τ") remains a candidate M7+ mode — reopening it is an input-trace MINOR addition (new tool ids), not a breaking change.
 
 **Q-002 · Particle species v1.** Current plan: one massive neutral species + photons. Charge/EM adds gameplay (plasma, lightning) at real cost (short-range solver). *Default: defer charge; keep the mass dial clean.*
 

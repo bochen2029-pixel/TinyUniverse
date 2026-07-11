@@ -7,3 +7,5 @@
 **Artifact:** `runs/nexus_v1.0.0_freeze.json`.
 
 **Anticipated supersession:** the M1 liborrery envelope lift replaces the self-contained BLAKE2b; if the canonical bytes differ, this golden is re-baselined under a signed entry here (MODULE.md known-limitation #1).
+
+**2026-07-11 (M1) — RESOLVED, GOLDEN STANDS:** `harness/hash_compat.cpp` cross-checked tiny_nexus's self-contained BLAKE2b-256 against liborrery's RFC-KAT'd `orrery::blake2b_hex` on 4 vectors (empty, "abc", fox, 276-byte multi-block): **byte-compatible on all**. No supersession; `ad64f810` remains the frozen golden. MODULE.md known-limitation #1 is closed.

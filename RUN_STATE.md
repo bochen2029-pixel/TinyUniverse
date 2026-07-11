@@ -1,22 +1,25 @@
 # RUN_STATE.md
 
-**As of:** 2026-07-11 · **Milestone:** M1 `canvas` · **State:** M0 CLOSED — nexus v1.0.0 green (11/11), golden `ad64f810` frozen, 24.1 s runtime, determinism verified in-process ×2 and out-of-process ×3.
+**As of:** 2026-07-11 · **Milestone:** M2 `newton` · **State:** M1 CLOSED — the beauty gate is settled. 1M particles at 1080p: **499 fps avg / 226 min** (SSAA 2×: 178/152); CINEMATIC §7 **10/10**. Evidence: `app/MODULE.md`, `runs/firstlight_cinematic.png` / `_physical.png` / `_ssaa.png`.
 
-## Current task
+## What M1 established
 
-M1 `canvas` — first light. Order of work:
-1. Resolve Q-001 to its default (god-hand v1) and freeze `contracts/frame.contract.md` v1.0.0 (regime-mask canonical table from nexus N10: QUANTUM 0x1 · CLASSICAL 0x2 · REL 0x4 · COMPACT 0x8 · BOUND 0x10 · MASSLESS 0x20).
-2. liborrery lift into `core/lib/` (verbatim, pinned ORRERY commit recorded; swap nexus's self-contained BLAKE2b for the envelope — golden supersession expected, signed in `goldens/nexus/NOTE.md`).
-3. Vulkan + CUDA external-memory interop skeleton (cuda-samples `simpleVulkan` / Mímir as reference); two-stream frame loop.
-4. CINEMATIC stack port from GARGANTUA (HDR → mip bloom → auto-exposure → AgX + ACES parity mode → dither), ImGui HUD shell, damped camera.
+- `app/tinyuniverse.cu` v0.1.0: all rendering in CUDA (HDR → mip bloom → auto-exposure → AgX/ACES → astro stretch → dither → CUDA HUD), two-stream frame loop per frame.contract v1.0.0, damped camera, cinematic/physical honesty toggle, one binary two faces (`--shot` headless / windowed / `--bench`).
+- liborrery lifted verbatim (ORRERY d56c4c7; `core/lib/LIFT.md`); BLAKE2b byte-compat green → nexus golden `ad64f810` stands.
+- D-012: presentation = P0 GL blit (Vulkan SDK absent); P1 Vulkan presentation owed, gated on SDK + DLSS milestone. D-013: CUDA bitmap HUD; ImGui rides P1.
 
-**M1 gate:** 1M inert drifting particles at 60 Hz 1080p with every CINEMATIC §7 box checked — the "prettiest N-body screensaver". If that frame doesn't beat three.js, stop and fix before physics.
+## Current task — M2 `newton`
+
+1. Contract first: `contracts/newton.contract.md` — spatial hash + leapfrog KDK + PM gravity (cuFFT Poisson) + P³M near-field; conservation gates (deterministic reductions via `core/lib/reduce.cuh`); scenario contracts `kepler` / `cloud-collapse` / `three-body`; oracle = nexus N2 + drift bounds.
+2. The app grows its first *forces* — the galaxy stops being inert and starts to swirl for real.
+3. First scenario goldens: (dials, seed, empty trace, steps) → declared state hash via liborrery envelope.
+
+**M2 gate:** 1M gravitating particles at 60 Hz; energy/momentum/L drift within declared bounds over 10⁶ ticks; scenario goldens frozen and two-pass verified.
 
 ## Chores carried
 
-- clang++/g++ parity build of nexus (owed from M0; no non-MSVC toolchain installed).
-- Pin Vulkan SDK version in BUILD.md when installed.
+- P1 Vulkan presentation (SDK install first) · ImGui at P1 · TAA · clang/g++ nexus parity · art-direction pass (dust lanes, interarm contrast, flare sprites).
 
 ## Standing context
 
-M0 evidence: `runs/nexus_v1.0.0_freeze.json` · `goldens/nexus/` · `nexus/MODULE.md`. Notable frozen physics: 1PN precession 2.3% off analytic (higher-order PN, inside 5% gate); P–W ISCO to 2.7e-9; Ratchet MC within 0.45% of closed form; the γ=10⁸ β-representability ceiling demonstrated deterministically (D-011). Repo docs are authoritative over agent memories where they disagree.
+Physics oracle: `tiny_nexus` v1.0.0 (golden `ad64f810`). Dials v0 frozen. Frame contract v1.0.0 frozen (god-hand, regime hex table). Repo docs are authoritative over agent memories where they disagree.

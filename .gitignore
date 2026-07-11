@@ -12,3 +12,4 @@ __pycache__/
 *.ilk
 *.log
 *.tmp
+runs/*.bmp

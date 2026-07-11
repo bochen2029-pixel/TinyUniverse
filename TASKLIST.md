@@ -10,15 +10,17 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(owed, moved to M1 chores)* clang++/g++ parity build — no non-MSVC toolchain on this machine
 - **Gate: MET** — all four regimes stepped in one scene, zero contradictions (N10 masks 0x12/0x24/0x1C stable, drifts ≤ 2.4e-13).
 
-## M1 · `canvas` — first light *(current)*
-- ☐ frame.contract.md v1.0.0 (freeze the DRAFT)
-- ☐ Vulkan swapchain + CUDA external-memory interop skeleton (simpleVulkan/Mímir reference)
-- ☐ liborrery lift into `core/lib/` (verbatim, KAT selftest green, pinned ORRERY commit recorded)
-- ☐ CINEMATIC stack: HDR accumulation → mip bloom → auto-exposure → AgX (+ ACES parity mode) → dither
-- ☐ Two-stream frame loop (presentation never waits); ImGui HUD shell; damped camera
-- **Gate:** 1M inert drifting particles at 60 Hz, 1080p, CINEMATIC §7 all boxes checked. The "prettiest N-body screensaver" — if this frame doesn't beat three.js, stop and fix before physics.
+## M1 · `canvas` — first light ☑ **CLOSED 2026-07-11** (P1 presentation owed)
+- ☑ frame.contract.md v1.0.0 frozen (Q-001 → god-hand; regime hex table; D-012 P0/P1 clause)
+- ☑ liborrery lifted verbatim (`core/lib/`, ORRERY commit d56c4c7, per-file sha256 in LIFT.md); BLAKE2b byte-compat verified (`harness/hash_compat.cpp` green) — **nexus golden stands**
+- ☑ CINEMATIC stack in CUDA: float4 HDR → 13-tap mip bloom → log-lum auto-exposure → AgX + ACES parity → astro stretch (cinematic-only, HUD-declared) → triangular dither
+- ☑ Two-stream frame loop (sim low-prio ping-pong publish, present high-prio); damped spring camera; CUDA bitmap HUD (D-013; ImGui deferred to P1)
+- ☑ Presentation P0: thin GL blit (D-012 — Vulkan SDK absent, measured)
+- ☐ *(owed → backlog)* P1 Vulkan swapchain + external-memory presentation (gate: SDK install + DLSS milestone)
+- ☐ *(carried)* clang++/g++ parity build of nexus
+- **Gate: MET** — 1M particles 1080p: **499 fps avg / 226 min** (SSAA 2×: 178/152); CINEMATIC §7 **10/10** (evidence: `app/MODULE.md`, `runs/firstlight_*.png`).
 
-## M2 · `newton` — the classical tier
+## M2 · `newton` — the classical tier *(current)*
 - ☐ Spatial hash; leapfrog KDK; PM gravity (cuFFT Poisson) + P³M near-field
 - ☐ Conservation gates (energy/momentum/L drift bounds, deterministic reductions)
 - ☐ Scenarios: `kepler` (two-body vs nexus N2), `cloud-collapse`, `three-body`
