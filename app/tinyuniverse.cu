@@ -37,6 +37,7 @@
 #include <vector>
 #include <string>
 #include <cufft.h>
+#include <complex>
 #include "../core/lib/rng.cuh"
 #include "../core/lib/reduce.cuh"
 #include "../core/lib/envelope.h"
@@ -54,12 +55,18 @@
 enum Scenario { SC_GALAXY = 0, SC_KEPLER, SC_THREEBODY, SC_CLOUD,
                 SC_MERGER, SC_ECHO, SC_RATCHET, SC_DETECTOR,
                 SC_KEPREL, SC_CLOCKS, SC_PHOTONS,
-                SC_COLLAPSE, SC_ISCO, SC_HAWKING };
+                SC_COLLAPSE, SC_ISCO, SC_HAWKING,
+                SC_DOUBLESLIT, SC_TUNNELING, SC_SHOQ };
 enum Solver   { SOLV_PM = 0, SOLV_DIRECT, SOLV_TINY, SOLV_NONE };
-static const char* SC_NAME[14] = {"galaxy", "kepler", "threebody", "cloud",
+static const char* SC_NAME[17] = {"galaxy", "kepler", "threebody", "cloud",
                                   "merger", "echo", "ratchet", "detector",
                                   "keprel", "clocks", "photons",
-                                  "collapse", "isco", "hawking"};
+                                  "collapse", "isco", "hawking",
+                                  "doubleslit", "tunneling", "shoq"};
+// planck contract: psi engine (2D 256^2 over a 64x64 su window)
+#define QN   256
+#define QL   64.0f
+#define QDX  (QL/QN)
 // gargantua contract: BH constants (dial-derived)
 #define NBH_MAX  8
 #define RS_PER_M 1.0e-5f                   // 2G/c^2
@@ -790,6 +797,74 @@ __global__ void kSplatBH(const float4* bhpos, int nbh, float4* hdr, RP rp){
         }
 }
 
+// --- M6 planck: psi engine (2D 256^2 split-step; planck contract) ---
+__global__ void kQGauss(cufftComplex* q, float x0, float y0, float sx, float sy, float kx0){
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= QN*QN) return;
+    int ix = idx % QN, iy = idx/QN;
+    float x = -QL*0.5f + (ix + 0.5f)*QDX;
+    float y = -QL*0.5f + (iy + 0.5f)*QDX;
+    float dx = (x - x0)/sx, dy = (y - y0)/sy;
+    float env = expf(-0.25f*(dx*dx + dy*dy));
+    float ph = kx0*x;
+    q[idx].x = env*cosf(ph);
+    q[idx].y = env*sinf(ph);
+}
+__global__ void kQPhaseK(cufftComplex* q, float coef){       // e^{-i coef k^2}
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= QN*QN) return;
+    int ix = idx % QN, iy = idx/QN;
+    int fx = (ix <= QN/2) ? ix : ix - QN;
+    int fy = (iy <= QN/2) ? iy : iy - QN;
+    float kf = 2.0f*PI_F/QL;
+    float k2 = kf*kf*(float)(fx*fx + fy*fy);
+    float ph = -coef*k2;
+    float c = cosf(ph), s = sinf(ph);
+    cufftComplex v = q[idx];
+    q[idx].x = v.x*c - v.y*s;
+    q[idx].y = v.x*s + v.y*c;
+}
+__global__ void kQDecayK(cufftComplex* q, float coef){       // e^{-coef k^2}
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= QN*QN) return;
+    int ix = idx % QN, iy = idx/QN;
+    int fx = (ix <= QN/2) ? ix : ix - QN;
+    int fy = (iy <= QN/2) ? iy : iy - QN;
+    float kf = 2.0f*PI_F/QL;
+    float d = expf(-coef*kf*kf*(float)(fx*fx + fy*fy));
+    q[idx].x *= d; q[idx].y *= d;
+}
+__global__ void kQPhaseV(cufftComplex* q, const float* V, float coef){   // e^{-i V coef}
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= QN*QN) return;
+    float ph = -V[idx]*coef;
+    float c = cosf(ph), s = sinf(ph);
+    cufftComplex v = q[idx];
+    q[idx].x = v.x*c - v.y*s;
+    q[idx].y = v.x*s + v.y*c;
+}
+__global__ void kQDecayV(cufftComplex* q, const float* V, float coef){   // e^{-V coef}
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= QN*QN) return;
+    float d = expf(-V[idx]*coef);
+    q[idx].x *= d; q[idx].y *= d;
+}
+__global__ void kQMul(cufftComplex* q, const float* m){
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= QN*QN) return;
+    q[idx].x *= m[idx]; q[idx].y *= m[idx];
+}
+__global__ void kQScale(cufftComplex* q, float s){
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= QN*QN) return;
+    q[idx].x *= s; q[idx].y *= s;
+}
+__global__ void kQNormAcc(const cufftComplex* q, unsigned long long* acc){
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= QN*QN) return;
+    orrery::fixed_atomic_add(acc, (double)q[idx].x*q[idx].x + (double)q[idx].y*q[idx].y);
+}
+
 __global__ void kClear(float4* hdr, int n){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i < n) hdr[i] = make_float4(0, 0, 0, 0);
@@ -1036,6 +1111,15 @@ static const double gKHawk = 80000.0/(15360.0*3.14159265358979*4.0e-6);  // hbar
 static unsigned hBHn = 0;
 static float4 hBHpos[NBH_MAX];
 static float4 *dHdrW = 0;                             // lensed HDR (render res)
+// M6 planck: psi engine state
+static cufftComplex *dQ = 0;
+static float *dQWall = 0, *dQEdge = 0, *dQV = 0;
+static unsigned long long *dQNorm = 0;
+static cufftHandle planQ;
+static bool gQAlloc = false;
+static std::string gPsiBytes;                         // final psi (joins declared hash)
+struct QMet { double c_psi, c_dots, c_det, kpk_rel, T, Tref, E, sigx; long long nrec; };
+static QMet gQM = {};
 static double gMTot = 1e6;
 struct Met { double KE, PE, E, Px, Py, Pz, Lz; unsigned long long nRel, nCls; };
 static Met  gM0 = {};                                  // meters at t=0
@@ -1060,10 +1144,14 @@ static void springStep(Spring& s, float dt){
     s.cur += s.vel*dt;
 }
 static void applyPreset(int i){
-    const float D0[14] = {380.0f, 650.0f, 9.0f, 420.0f, 420.0f, 420.0f,
+    const float D0[17] = {380.0f, 650.0f, 9.0f, 420.0f, 420.0f, 420.0f,
                           300.0f, 120.0f, 45.0f, 260.0f, 260.0f,
-                          90.0f, 25.0f, 30.0f};
+                          90.0f, 25.0f, 30.0f, 50.0f, 50.0f, 50.0f};
     float d = D0[gScenario];
+    if (gScenario == SC_DOUBLESLIT && i == 0){        // face the screen plane
+        cAz.tgt = 0; cEl.tgt = 6; cDist.tgt = logf(d);
+        return;
+    }
     if (i == 0){ cAz.tgt = 35;  cEl.tgt = 24; cDist.tgt = logf(d); }
     if (i == 1){ cAz.tgt = 120; cEl.tgt = 10; cDist.tgt = logf(0.45f*d); }
     if (i == 2){ cAz.tgt = 80;  cEl.tgt = 86; cDist.tgt = logf(0.87f*d); }
@@ -1187,10 +1275,11 @@ static void drawHud(const RP& rp){
     emit(16, 50, line, 0);
     if (gMode) emit(16, 68, "PHYSICAL: L=T4 SAT=1.0 NO CLIP", 0);
     else       emit(16, 68, "CINEMATIC: L=T2.2 SAT=1.2 STRETCH", 0);
-    static const char* SC_HUD[14] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD",
+    static const char* SC_HUD[17] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD",
                                      "MERGER", "ECHO", "RATCHET", "DETECTOR",
                                      "KEPREL", "CLOCKS", "PHOTONS",
-                                     "COLLAPSE", "ISCO", "HAWKING"};
+                                     "COLLAPSE", "ISCO", "HAWKING",
+                                     "DOUBLESLIT", "TUNNELING", "SHOQ"};
     snprintf(line, sizeof line, "%s %s  DE %+.1E  DP %.1E", SC_HUD[gScenario],
              gSolver == SOLV_PM ? "PM" : (gSolver == SOLV_TINY ? "TINY" :
              (gSolver == SOLV_NONE ? "NONE" : "DIRECT")), gDE, gDP);
@@ -1247,6 +1336,316 @@ static double entropyNow(){
         }
     }
     return S;
+}
+
+// --- M6 planck: host side of the psi engine ---
+static void hfft(std::vector<std::complex<double>>& a, bool inv){   // radix-2, in-place
+    const size_t n = a.size();
+    for (size_t i = 1, j = 0; i < n; i++){
+        size_t bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) std::swap(a[i], a[j]);
+    }
+    for (size_t len = 2; len <= n; len <<= 1){
+        double ang = 2.0*3.14159265358979323846/(double)len*(inv ? 1.0 : -1.0);
+        std::complex<double> wl(cos(ang), sin(ang));
+        for (size_t i = 0; i < n; i += len){
+            std::complex<double> w(1, 0);
+            for (size_t k = 0; k < len/2; k++){
+                std::complex<double> u = a[i+k], v = a[i+k+len/2]*w;
+                a[i+k] = u + v; a[i+k+len/2] = u - v;
+                w *= wl;
+            }
+        }
+    }
+    if (inv) for (auto& x : a) x /= (double)n;
+}
+static void qAllocOnce(){
+    if (gQAlloc) return;
+    CUDA_CHECK(cudaMalloc(&dQ, (size_t)QN*QN*sizeof(cufftComplex)));
+    CUDA_CHECK(cudaMalloc(&dQWall, (size_t)QN*QN*sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&dQEdge, (size_t)QN*QN*sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&dQV,    (size_t)QN*QN*sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&dQNorm, sizeof(unsigned long long)));
+    CUFFT_CHECK(cufftPlan2d(&planQ, QN, QN, CUFFT_C2C));
+    CUFFT_CHECK(cufftSetStream(planQ, simS));
+    gQAlloc = true;
+}
+static double qNormHost(){
+    CUDA_CHECK(cudaMemsetAsync(dQNorm, 0, 8, simS));
+    kQNormAcc<<<(QN*QN + 255)/256, 256, 0, simS>>>(dQ, dQNorm);
+    unsigned long long h;
+    CUDA_CHECK(cudaStreamSynchronize(simS));
+    CUDA_CHECK(cudaMemcpy(&h, dQNorm, 8, cudaMemcpyDeviceToHost));
+    return orrery::fixed_decode((long long)h)*(double)QDX*QDX;
+}
+static void qNormalize(){
+    double n = qNormHost();
+    kQScale<<<(QN*QN + 255)/256, 256, 0, simS>>>(dQ, (float)(1.0/sqrt(n)));
+}
+static void qDownload(std::vector<cufftComplex>& h){
+    h.resize((size_t)QN*QN);
+    CUDA_CHECK(cudaStreamSynchronize(simS));
+    CUDA_CHECK(cudaMemcpy(h.data(), dQ, (size_t)QN*QN*sizeof(cufftComplex),
+                          cudaMemcpyDeviceToHost));
+}
+// Strang split-step, real time (dt = dial): V half, wall, K, V half, wall, edge
+static void qStepReal(int steps, bool useV, bool useWall){
+    dim3 b(256), g((QN*QN + 255)/256);
+    const float coefK = 0.25f*DT;                     // hbar/(2m)*dt, hbar=0.5 m=1
+    const float halfV = DT;                            // V*dt/(2*hbar) = V*dt (1/(2hbar)=1)
+    for (int s = 0; s < steps; s++){
+        if (useV)    kQPhaseV<<<g, b, 0, simS>>>(dQ, dQV, halfV);
+        if (useWall) kQMul<<<g, b, 0, simS>>>(dQ, dQWall);
+        CUFFT_CHECK(cufftExecC2C(planQ, dQ, dQ, CUFFT_FORWARD));
+        kQPhaseK<<<g, b, 0, simS>>>(dQ, coefK);
+        CUFFT_CHECK(cufftExecC2C(planQ, dQ, dQ, CUFFT_INVERSE));
+        kQScale<<<g, b, 0, simS>>>(dQ, 1.0f/(QN*QN));
+        if (useV)    kQPhaseV<<<g, b, 0, simS>>>(dQ, dQV, halfV);
+        if (useWall) kQMul<<<g, b, 0, simS>>>(dQ, dQWall);
+        kQMul<<<g, b, 0, simS>>>(dQ, dQEdge);
+    }
+}
+static void qStepImag(int iters, float tau){
+    dim3 b(256), g((QN*QN + 255)/256);
+    const float coefK = 0.25f*tau;                    // hbar/(2m)*tau
+    const float halfV = tau;                          // V*tau/(2*hbar)
+    for (int s = 0; s < iters; s++){
+        kQDecayV<<<g, b, 0, simS>>>(dQ, dQV, halfV);
+        CUFFT_CHECK(cufftExecC2C(planQ, dQ, dQ, CUFFT_FORWARD));
+        kQDecayK<<<g, b, 0, simS>>>(dQ, coefK);
+        CUFFT_CHECK(cufftExecC2C(planQ, dQ, dQ, CUFFT_INVERSE));
+        kQScale<<<g, b, 0, simS>>>(dQ, 1.0f/(QN*QN));
+        kQDecayV<<<g, b, 0, simS>>>(dQ, dQV, halfV);
+        qNormalize();
+    }
+}
+// screen-window y-marginal, normalized to sum 1
+static std::vector<double> qMarginalY(const std::vector<cufftComplex>& h,
+                                      double xlo, double xhi){
+    std::vector<double> P(QN, 0.0);
+    double tot = 0;
+    for (int iy = 0; iy < QN; iy++)
+        for (int ix = 0; ix < QN; ix++){
+            double x = -QL*0.5 + (ix + 0.5)*QDX;
+            if (x < xlo || x > xhi) continue;
+            double p = (double)h[iy*QN + ix].x*h[iy*QN + ix].x
+                     + (double)h[iy*QN + ix].y*h[iy*QN + ix].y;
+            P[iy] += p; tot += p;
+        }
+    if (tot > 0) for (auto& p : P) p /= tot;
+    return P;
+}
+static double qYof(int iy){ return -QL*0.5 + (iy + 0.5)*QDX; }
+static double qContrast(const std::vector<double>& yv, double kstar){   // 2|sum e^{-iky}|/N
+    double re = 0, im = 0;
+    for (double y : yv){ re += cos(kstar*y); im -= sin(kstar*y); }
+    return 2.0*sqrt(re*re + im*im)/(double)yv.size();
+}
+static double qContrastP(const std::vector<double>& P, double kstar){
+    double re = 0, im = 0;
+    for (int iy = 0; iy < QN; iy++){ re += P[iy]*cos(kstar*qYof(iy)); im -= P[iy]*sin(kstar*qYof(iy)); }
+    return 2.0*sqrt(re*re + im*im);
+}
+static double qSampleY(const std::vector<double>& cdf, double u){       // inverse CDF
+    int lo = 0, hi = QN - 1;
+    while (lo < hi){ int mid = (lo + hi)/2; if (cdf[mid] < u) lo = mid + 1; else hi = mid; }
+    double c1 = cdf[lo], c0 = lo ? cdf[lo-1] : 0.0;
+    double f = (c1 > c0) ? (u - c0)/(c1 - c0) : 0.5;
+    return -QL*0.5 + (lo + f)*QDX;
+}
+static void qBuildEdgeMask(){
+    std::vector<float> m((size_t)QN*QN);
+    auto s1 = [](int i){
+        const int B = 8;
+        float t = 1.0f;
+        if (i < B) t = sinf(PI_F*0.5f*(i + 0.5f)/B);
+        else if (i >= QN - B) t = sinf(PI_F*0.5f*(QN - 0.5f - i)/B);
+        return t*t;
+    };
+    for (int iy = 0; iy < QN; iy++)
+        for (int ix = 0; ix < QN; ix++) m[(size_t)iy*QN + ix] = s1(ix)*s1(iy);
+    CUDA_CHECK(cudaMemcpy(dQEdge, m.data(), m.size()*4, cudaMemcpyHostToDevice));
+}
+static void qBuildWall(int mode){                     // 0 both slits · 1 A only · 2 B only
+    std::vector<float> w((size_t)QN*QN, 1.0f);
+    for (int iy = 0; iy < QN; iy++)
+        for (int ix = 0; ix < QN; ix++){
+            double x = -QL*0.5 + (ix + 0.5)*QDX;
+            if (x < 0.0 || x > 1.0) continue;
+            double y = qYof(iy);
+            bool inA = (y >  1.25 && y <  2.75);
+            bool inB = (y > -2.75 && y < -1.25);
+            bool open = (mode == 0) ? (inA || inB) : (mode == 1 ? inA : inB);
+            if (!open) w[(size_t)iy*QN + ix] = 0.0f;
+        }
+    CUDA_CHECK(cudaMemcpy(dQWall, w.data(), w.size()*4, cudaMemcpyHostToDevice));
+}
+static void qRunDoubleslit(std::vector<double>& dotsY){
+    qAllocOnce(); qBuildEdgeMask();
+    const double p0 = 2.0, hb = 0.5, d = 4.0, Lsc = 14.0;
+    const double kstar = d*p0/(hb*Lsc);
+    const int NDOTS = 4096, STEPS = 3600;
+    dim3 b(256), g((QN*QN + 255)/256);
+    auto evolve = [&](int wallMode, std::vector<cufftComplex>& out){
+        qBuildWall(wallMode);
+        kQGauss<<<g, b, 0, simS>>>(dQ, -15.0f, 0.0f, 1.5f, 4.0f, (float)(p0/hb));
+        qNormalize();
+        qStepReal(STEPS, false, true);
+        qDownload(out);
+    };
+    std::vector<cufftComplex> hBoth, hA, hB;
+    evolve(0, hBoth); evolve(1, hA); evolve(2, hB);
+    auto Pb = qMarginalY(hBoth, 12.0, 16.0);
+    auto Pa = qMarginalY(hA, 12.0, 16.0);
+    auto Pc = qMarginalY(hB, 12.0, 16.0);
+    gQM.c_psi = qContrastP(Pb, kstar);
+    double bestk = 0, bestv = -1;
+    for (int q = 0; q <= 100; q++){
+        double k = kstar*(0.5 + q*0.01);
+        double v = qContrastP(Pb, k);
+        if (v > bestv){ bestv = v; bestk = k; }
+    }
+    gQM.kpk_rel = fabs(bestk/kstar - 1.0);
+    auto mkcdf = [](const std::vector<double>& P){
+        std::vector<double> c(QN); double s = 0;
+        for (int i = 0; i < QN; i++){ s += P[i]; c[i] = s; }
+        for (int i = 0; i < QN; i++) c[i] /= (s > 0 ? s : 1.0);
+        return c;
+    };
+    auto cb = mkcdf(Pb), ca = mkcdf(Pa), cc = mkcdf(Pc);
+    dotsY.resize(NDOTS);
+    std::vector<double> detY(NDOTS);
+    for (int j = 0; j < NDOTS; j++){
+        dotsY[j] = qSampleY(cb, orrery::counter_uniform(gSeed, j, 0, 8));
+        bool useA = orrery::counter_uniform(gSeed, j, 1, 8) < 0.5;   // symmetric slits (declared)
+        detY[j] = qSampleY(useA ? ca : cc, orrery::counter_uniform(gSeed, j, 2, 8));
+    }
+    gQM.c_dots = qContrast(dotsY, kstar);
+    gQM.c_det  = qContrast(detY, kstar);
+    gQM.nrec = NDOTS;
+    gPsiBytes.assign((const char*)hBoth.data(), hBoth.size()*sizeof(cufftComplex));
+}
+static void qRunTunneling(){
+    qAllocOnce(); qBuildEdgeMask();
+    const double V0 = 1.8, p0 = 1.5;
+    const int STEPS = 2400;
+    std::vector<float> V((size_t)QN*QN, 0.0f);
+    for (int iy = 0; iy < QN; iy++)
+        for (int ix = 0; ix < QN; ix++){
+            double x = -QL*0.5 + (ix + 0.5)*QDX;
+            if (x >= 0.0 && x <= 1.0) V[(size_t)iy*QN + ix] = (float)V0;
+        }
+    CUDA_CHECK(cudaMemcpy(dQV, V.data(), V.size()*4, cudaMemcpyHostToDevice));
+    dim3 b(256), g((QN*QN + 255)/256);
+    kQGauss<<<g, b, 0, simS>>>(dQ, -8.0f, 0.0f, 2.0f, 6.0f, (float)(p0/0.5));
+    qNormalize();
+    qStepReal(STEPS, true, false);
+    std::vector<cufftComplex> h;
+    qDownload(h);
+    double num = 0, tot = 0;
+    for (int iy = 0; iy < QN; iy++)
+        for (int ix = 0; ix < QN; ix++){
+            double x = -QL*0.5 + (ix + 0.5)*QDX;
+            double p = (double)h[(size_t)iy*QN+ix].x*h[(size_t)iy*QN+ix].x
+                     + (double)h[(size_t)iy*QN+ix].y*h[(size_t)iy*QN+ix].y;
+            tot += p; if (x > 1.5) num += p;
+        }
+    gQM.T = num/tot;
+    // in-scenario oracle: host fp64 1D split-step, SAME dx as the GPU grid —
+    // tunneling is exponentially sensitive to barrier-edge discretization, so the
+    // oracle isolates implementation (fp32 vs fp64, 2D vs 1D), not grid resolution
+    const int n1 = QN; const double dx1 = (double)QL/n1;
+    std::vector<std::complex<double>> psi(n1);
+    for (int i = 0; i < n1; i++){
+        double x = -QL*0.5 + (i + 0.5)*dx1;
+        double dxp = (x + 8.0)/2.0;
+        psi[i] = std::polar(exp(-0.25*dxp*dxp), (p0/0.5)*x);
+    }
+    { double s = 0; for (auto& c : psi) s += std::norm(c); s = sqrt(s*dx1); for (auto& c : psi) c /= s; }
+    std::vector<double> V1(n1, 0.0), E1(n1);
+    const int B1 = (int)(2.0/dx1);
+    for (int i = 0; i < n1; i++){
+        double x = -QL*0.5 + (i + 0.5)*dx1;
+        if (x >= 0.0 && x <= 1.0) V1[i] = V0;
+        double t = 1.0;
+        if (i < B1) t = sin(3.14159265358979324*0.5*(i + 0.5)/B1);
+        else if (i >= n1 - B1) t = sin(3.14159265358979324*0.5*(n1 - 0.5 - i)/B1);
+        E1[i] = t*t;
+    }
+    const double dtq = 1.0/240.0, coefK = 0.25*dtq, halfV = dtq;
+    for (int s = 0; s < STEPS; s++){
+        for (int i = 0; i < n1; i++) psi[i] *= std::polar(1.0, -V1[i]*halfV);
+        hfft(psi, false);
+        for (int i = 0; i < n1; i++){
+            int f = (i <= n1/2) ? i : i - n1;
+            double k = 2.0*3.14159265358979324*f/QL;
+            psi[i] *= std::polar(1.0, -coefK*k*k);
+        }
+        hfft(psi, true);
+        for (int i = 0; i < n1; i++) psi[i] *= std::polar(1.0, -V1[i]*halfV);
+        for (int i = 0; i < n1; i++) psi[i] *= E1[i];
+    }
+    double nrm = 0, trn = 0;
+    for (int i = 0; i < n1; i++){
+        double x = -QL*0.5 + (i + 0.5)*dx1;
+        double p = std::norm(psi[i]);
+        nrm += p; if (x > 1.5) trn += p;
+    }
+    gQM.Tref = trn/nrm;
+    gPsiBytes.assign((const char*)h.data(), h.size()*sizeof(cufftComplex));
+}
+static void qRunShoq(){
+    qAllocOnce();
+    std::vector<float> V((size_t)QN*QN);
+    for (int iy = 0; iy < QN; iy++)
+        for (int ix = 0; ix < QN; ix++){
+            double x = -QL*0.5 + (ix + 0.5)*QDX, y = qYof(iy);
+            V[(size_t)iy*QN + ix] = (float)(0.5*(x*x + y*y));
+        }
+    CUDA_CHECK(cudaMemcpy(dQV, V.data(), V.size()*4, cudaMemcpyHostToDevice));
+    dim3 b(256), g((QN*QN + 255)/256);
+    kQGauss<<<g, b, 0, simS>>>(dQ, 0.4f, -0.3f, 1.5f, 1.2f, 0.0f);
+    qNormalize();
+    qStepImag(15000, 0.002f);
+    std::vector<cufftComplex> h;
+    qDownload(h);
+    std::vector<std::complex<double>> a((size_t)QN*QN);
+    double nn = 0, vv = 0, mx = 0, mxx = 0;
+    for (int iy = 0; iy < QN; iy++)
+        for (int ix = 0; ix < QN; ix++){
+            std::complex<double> c(h[(size_t)iy*QN+ix].x, h[(size_t)iy*QN+ix].y);
+            a[(size_t)iy*QN + ix] = c;
+            double p = std::norm(c);
+            double x = -QL*0.5 + (ix + 0.5)*QDX;
+            nn += p; vv += p*V[(size_t)iy*QN+ix]; mx += p*x; mxx += p*x*x;
+        }
+    vv /= nn; mx /= nn; mxx /= nn;
+    gQM.sigx = sqrt(mxx - mx*mx);
+    std::vector<std::complex<double>> row(QN), col(QN);
+    for (int iy = 0; iy < QN; iy++){
+        for (int ix = 0; ix < QN; ix++) row[ix] = a[(size_t)iy*QN + ix];
+        hfft(row, false);
+        for (int ix = 0; ix < QN; ix++) a[(size_t)iy*QN + ix] = row[ix];
+    }
+    for (int ix = 0; ix < QN; ix++){
+        for (int iy = 0; iy < QN; iy++) col[iy] = a[(size_t)iy*QN + ix];
+        hfft(col, false);
+        for (int iy = 0; iy < QN; iy++) a[(size_t)iy*QN + ix] = col[iy];
+    }
+    double kn = 0, tt = 0;
+    for (int iy = 0; iy < QN; iy++)
+        for (int ix = 0; ix < QN; ix++){
+            int fx = (ix <= QN/2) ? ix : ix - QN;
+            int fy = (iy <= QN/2) ? iy : iy - QN;
+            double kf = 2.0*3.14159265358979324/QL;
+            double k2 = kf*kf*((double)fx*fx + (double)fy*fy);
+            double p = std::norm(a[(size_t)iy*QN + ix]);
+            kn += p; tt += p*0.125*k2;                 // hbar^2 k^2 / 2m = 0.25*k^2/2
+        }
+    gQM.E = tt/kn + vv;
+    gPsiBytes.assign((const char*)h.data(), h.size()*sizeof(cufftComplex));
 }
 
 // invariant: dAcc = a(dPos[gPub]) after every full tick and after init
@@ -1625,6 +2024,35 @@ static void allocAll(){
         CUDA_CHECK(cudaMemcpy(dBHn, &one, sizeof one, cudaMemcpyHostToDevice));
         gSolver = SOLV_NONE; gBHActive = true;
     } break;
+    case SC_DOUBLESLIT: {                             // planck contract: the experiment
+        gN = 4096; gMTot = 4096.0;
+        std::vector<double> dotsY;
+        qRunDoubleslit(dotsY);
+        std::vector<float4> hp(gN), hm(gN, make_float4(0, 0, 0, 1.0f));
+        std::vector<float> ht(gN, 0.0f);
+        std::vector<unsigned> hr(gN, 0x02u);
+        for (int j = 0; j < gN; j++){
+            float zj = (float)(4.0*orrery::counter_gauss(gSeed, j, 3, 8));  // curtain depth, deterministic
+            hp[j] = make_float4(14.5f, (float)dotsY[j], zj, 12000.0f);
+        }
+        CUDA_CHECK(cudaMemcpy(dPos[0], hp.data(), (size_t)gN*16, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dMom, hm.data(), (size_t)gN*16, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dTau, ht.data(), (size_t)gN*4, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dRegime, hr.data(), (size_t)gN*4, cudaMemcpyHostToDevice));
+        gSolver = SOLV_NONE;
+    } break;
+    case SC_TUNNELING:
+        gN = 1000; gMTot = 1000.0;
+        kInitCloud<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed, 100.0f, 0.35f);
+        qRunTunneling();
+        gSolver = SOLV_NONE;
+        break;
+    case SC_SHOQ:
+        gN = 1000; gMTot = 1000.0;
+        kInitCloud<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed, 100.0f, 0.35f);
+        qRunShoq();
+        gSolver = SOLV_NONE;
+        break;
     }
     CUDA_CHECK(cudaMemcpy(dPos[1], dPos[0], (size_t)gN*sizeof(float4),
                           cudaMemcpyDeviceToDevice));
@@ -1774,6 +2202,9 @@ int main(int argc, char** argv){
             else if (s == "collapse")  gScenario = SC_COLLAPSE;
             else if (s == "isco")      gScenario = SC_ISCO;
             else if (s == "hawking")   gScenario = SC_HAWKING;
+            else if (s == "doubleslit") gScenario = SC_DOUBLESLIT;
+            else if (s == "tunneling")  gScenario = SC_TUNNELING;
+            else if (s == "shoq")       gScenario = SC_SHOQ;
             else { fprintf(stderr, "error: unknown scenario\n"); return 2; }
         }
         else { fprintf(stderr, "usage: tinyuniverse [--scenario galaxy|kepler|threebody|cloud] "
@@ -1798,13 +2229,13 @@ int main(int argc, char** argv){
 
     if (jsonMode || goldenMode){                      // headless instrument face (newton contract)
         if (goldenMode){                              // frozen golden params (seed forced pre-init)
-            const long long GS[14] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
-                                      320000, 24000, 3000, 12000, 6000, 4000};
+            const long long GS[17] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
+                                      320000, 24000, 3000, 12000, 6000, 4000, 0, 0, 0};
             runSteps = GS[gScenario];
         }
         if (runSteps <= 0){
-            const long long GS[14] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
-                                      320000, 24000, 3000, 12000, 6000, 4000};
+            const long long GS[17] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
+                                      320000, 24000, 3000, 12000, 6000, 4000, 0, 0, 0};
             runSteps = GS[gScenario];
         }
         long long done = 0, nextPct = 10;
@@ -1881,6 +2312,7 @@ int main(int argc, char** argv){
             bytes.append((const char*)bhM, sizeof bhM);
             bytes.append((const char*)lg, sizeof lg);
         }
+        if (!gPsiBytes.empty()) bytes.append(gPsiBytes);   // psi joins the declared state (planck)
         std::string shash = orrery::blake2b_hex(bytes, 32);
 
         double pnorm = sqrt(2.0*gMTot*(gM0.KE > 1e-12 ? gM0.KE : fabs(gM0.E) + 1e-12));
@@ -1903,6 +2335,33 @@ int main(int argc, char** argv){
         using namespace orrery;
         auto B = [](bool b){ return std::string(b ? "true" : "false"); };
         switch (gScenario){
+        case SC_DOUBLESLIT: {
+            bool g1 = gQM.c_psi > 0.35, g2 = gQM.c_dots > 0.30, g3 = gQM.c_det < 0.12;
+            bool g4 = gQM.kpk_rel < 0.08, g5 = fabs(gQM.c_dots - gQM.c_psi) < 0.1;  // near-field (D-018)
+            bool g6 = (gQM.nrec == 4096);
+            pass = g1 && g2 && g3 && g4 && g5 && g6;
+            gates = "\"c_psi_gt_0.35\":" + B(g1) + ",\"c_dots_gt_0.30\":" + B(g2)
+                  + ",\"c_det_lt_0.12\":" + B(g3) + ",\"k_peak_8pc\":" + B(g4)
+                  + ",\"dots_match_psi\":" + B(g5) + ",\"recorded_4096\":" + B(g6);
+            resExtra = ",\"c_psi\":" + fmt6(gQM.c_psi) + ",\"c_dots\":" + fmt6(gQM.c_dots)
+                     + ",\"c_det\":" + fmt6(gQM.c_det) + ",\"kpk_rel\":" + fmt6(gQM.kpk_rel)
+                     + ",\"n_recorded\":" + fmti(gQM.nrec);
+        } break;
+        case SC_TUNNELING: {
+            double dT = fabs(gQM.T - gQM.Tref);
+            bool g1 = dT < 1e-3, g2 = (gQM.T > 0.005 && gQM.T < 0.2);
+            pass = g1 && g2;
+            gates = "\"t_vs_fp64_lt_1e-3\":" + B(g1) + ",\"t_band\":" + B(g2);
+            resExtra = ",\"t_2d\":" + fmt6(gQM.T) + ",\"t_ref_fp64\":" + fmt6(gQM.Tref);
+        } break;
+        case SC_SHOQ: {
+            double erel = fabs(gQM.E - 0.5)/0.5, srel = fabs(gQM.sigx - 0.5)/0.5;
+            bool g1 = erel < 1e-3, g2 = srel < 1e-2;
+            pass = g1 && g2;
+            gates = "\"e0_lt_1e-3\":" + B(g1) + ",\"sigma_lt_1e-2\":" + B(g2);
+            resExtra = ",\"e0\":" + fmt6(gQM.E) + ",\"e0_exp\":" + fmt6(0.5)
+                     + ",\"sigma_x\":" + fmt6(gQM.sigx);
+        } break;
         case SC_COLLAPSE: {
             std::vector<unsigned> hg(gN);
             CUDA_CHECK(cudaMemcpy(hg.data(), dRegime, (size_t)gN*4, cudaMemcpyDeviceToHost));
