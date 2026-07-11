@@ -136,8 +136,11 @@ ADRs in `DECISIONS.md`. Summary: CUDA 13.1 · sm_89 (fat binary sm_89+sm_90 SASS
 | gargantua | CUDA(/OptiX) | BH entities, P–W disks, Hawking, lensed view | blackhole.cu (lift) | nexus N4 + analytic Kerr | planned (M5) |
 | planck | CUDA (cuFFT) | quantum bubbles + inscription collapse | new | nexus N5 | planned (M6) |
 | cosmos | CUDA | torus wrap, little-planet, light history, a(t), roaming bubbles | new | circumnav/expand/bubbles + wrap consistency | **CLOSED (M7) — 21/21 green** |
+| **substrate_nexus** | C++17 fp64 | **v2 N0**: spherical Einstein–Klein–Gordon oracle; demonstrates Choptuik Type-II critical collapse (BH mass → 0 at p*) | new (NR literature; G=c=1) | S1–S5 battery (flat/sub/super/transition/massive) | **CLOSED (v2 N0) — golden `13aa73e5`; precise γ deferred to AMR (D-021)** |
 
 Shared infrastructure (not a module): `core/lib/` — the liborrery lift (D-005), KAT-selftested, verbatim.
+
+**v2 SUBSTRATE track** (D-020; `docs/PROPOSAL_2026-07-12_v2_substrate.md`): the one-field rewrite (Schrödinger–Poisson → lapse → Einstein–Klein–Gordon → closures + Ratchet lattice). N0 `substrate_nexus` is its standing fp64 oracle, built CPU-first (no GPU); the GPU ladder N1 `field` → N2 `lapse` → N3 `horizon` → N4 `star` is future work, each gated against N0 and the 21 v1 goldens (the oracle farm).
 
 ## 12 · What this is NOT
 

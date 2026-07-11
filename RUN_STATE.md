@@ -1,6 +1,26 @@
 # RUN_STATE.md
 
-**As of:** 2026-07-11 · **Milestone:** M7 `cosmos` **CLOSED** — the universe is a globe. **State:** THE REGIME LADDER + THE WORLD ARE BOTH COMPLETE. **21/21 goldens GREEN** (~105 s idle card). App v0.5.0 "cosmos": 20 scenarios. Contracts: + cosmos v1.0.0; frame → v1.1.0.
+**As of:** 2026-07-11 · **Milestone:** v2 **N0 `substrate_nexus` CLOSED** — the substrate ladder has its foundation stone. **State:** v1 complete (M0–M7); v2 track begun (D-020). **22/22 goldens GREEN** (~121 s): nexus + **substrate_nexus** (CPU fp64, no GPU) + 20 GPU. Contracts: + substrate_nexus v1.0.0 (8 → but v2 numbering). Harness now runs CPU oracles under any card contention.
+
+## What N0 established (v2 foundation stone; D-020/D-021)
+
+- **A spherical Einstein–Klein–Gordon solver** (`substrate/substrate_nexus.cpp`, CPU fp64, polar-areal constrained evolution, G=c=1) — the standing oracle for the v2 GPU ladder, built **before any GPU code** and needing no card. Golden `13aa73e5` (N=800, r_max=24, ~20 s).
+- **Four rigorous oracles** a stranger runs cold: flat-space mass conservation (7.9e-4) · subcritical dispersal · supercritical horizon formation (2m/r→0.98, lapse→3.9e-5) · massive-KG stability+conservation (3.3e-6).
+- **The Choptuik phenomenon, honestly**: S4 demonstrates the **Type-II critical transition** — a bracketed critical amplitude p*=0.404 where the black-hole mass falls continuously to zero (M_BH 0.412→0.118, ratio 0.29; arbitrarily small black holes), clean far-field power law R²=0.998. **The precise universal exponent γ ≈ 0.374 is DEFERRED to the AMR contract (D-021)**: a uniform grid caps the self-similar curvature (measured), refining turns near-critical chaotic — Choptuik needed AMR. Per RAYFORMER/D-016, N0 ships what it proves (the transition) and names what it cannot (the exponent) rather than fake a number that would poison the oracle farm.
+
+## Next — the v2 GPU ladder, or v1 polish (operator's call)
+
+- **v2 continues:** N1 `field` (Schrödinger–Poisson 256³–512³ GPU, the two v1 engines fused) → N2 `lapse` → N3 `horizon` (BSSN+scalar; may reach precise γ) → N4 `star` (the hydrogen-ball sentence). Each gated against N0 + the 21 v1 goldens (the oracle farm). Contract-first per module.
+- **v1 polish backlog:** a(t) little-planet cosmology timelapse video · Φ-coupled bubbles · P1 Vulkan/ImGui · GARGANTUA Kerr geodesic art pass · 2.5PN · Q-006.
+- **AMR contract** (would let N0/N3 reach the precise Choptuik γ) — named future work.
+
+## Chores carried
+
+clang/g++ parity (nexus + substrate_nexus) · P1 Vulkan · ImGui · TAA · art pass (Kerr view + OptiX → ORRERY `lens`) · cufft64 dll packaging · P³M/spatial hash · Q-006 · 2.5PN · bound oscillaton (N0 S5 deferred).
+
+## Standing context
+
+v1: the regime ladder + the world, complete (M0–M7, 21 goldens). v2: the substrate rewrite begun — N0 the fp64 oracle spine (22nd golden). Every physics claim a stranger reproduces cold from BUILD.md; every claim the tool can't back is named, not faked (D-016/D-021). GPU shared (preflight exits 3 <2 GB; CPU oracles run regardless). Repo docs authoritative over agent memories.
 
 ## What M7 established
 

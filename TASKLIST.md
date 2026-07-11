@@ -81,5 +81,19 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(deferred → backlog)* Φ-coupled bubbles (V=0 free evolution v1); moving bubble window; a(t) little-planet timelapse video; light-history for BH/bubble glows
 - **Gate: MET** — the universe is a globe, wrapped and lensed and self-visible; cosmology's linear growth is a frozen number; quantum bubbles roam and collapse; every regime golden a stranger runs cold.
 
+## v2 SUBSTRATE track (D-020; proposal `docs/PROPOSAL_2026-07-12_v2_substrate.md`)
+
+### N0 · `substrate_nexus` — the substrate oracle ☑ **CLOSED 2026-07-11**
+- ☑ Contract frozen (`contracts/substrate_nexus.contract.md` v1.0.0); geometric G=c=1 (D-020)
+- ☑ `substrate/substrate_nexus.cpp` — CPU fp64 spherical Einstein–Klein–Gordon, polar-areal constrained evolution (RK4, log-metric integration for positivity, KO dissipation, origin parity, outgoing BC). No GPU.
+- ☑ Battery S1–S5 + determinism green in ~20 s; golden `13aa73e5` frozen (N=800, r_max=24); GOLDEN OK out-of-process
+- ☑ S1 flat-space mass conservation 7.9e-4 · S2 subcritical dispersal · S3 supercritical horizon (2m/r→0.98, lapse→3.9e-5, M_BH=0.43) · **S4 Choptuik Type-II transition: p*=0.404 bracketed, M_BH 0.412→0.118 → 0 at p* (ratio 0.29), clean power law R²=0.998** · S5 massive-KG stable + conserved 3.3e-6
+- ☑ Harness: CPU oracles (nexus + substrate_nexus) run regardless of GPU contention; **22/22 GREEN**
+- ☐ *(deferred → AMR contract, D-021)* **precise Choptuik γ ≈ 0.374** — uniform grid caps the self-similar curvature (measured); N0 proves the transition, not the exponent. Also: bound oscillaton eigen-profile; clang/g++ parity.
+- **Gate: MET (honest scope)** — the spherical EKG evolution is trustworthy (four green oracles) and the Choptuik *phenomenon* (Type-II, arbitrarily small BHs) is demonstrated and frozen, before any GPU substrate code. Precise γ named as future work (D-021, RAYFORMER discipline).
+
+### N1–N4 (GPU, future — each gated against N0 + the 21 v1 goldens)
+- ☐ N1 `field` (Schrödinger–Poisson 256³–512³) · ☐ N2 `lapse` (α(x) + photon field) · ☐ N3 `horizon` (BSSN+scalar; may reach precise γ) · ☐ N4 `star` (fusion closure + radiation + Ratchet lattice — the hydrogen-ball sentence)
+
 ## Backlog (measured adoption only; each needs an honest baseline)
 - ☐ DLSS 4.5 via Streamline · ☐ RTXDI/ReSTIR emissive-particle lighting · ☐ NRD · ☐ Slang port of shared math (D-008) · ☐ UE 5.8 TextureShare showcase shell · ☐ MCP surface for scenario driving · ☐ df64 zoom ladder (D-010 gate)

@@ -10,6 +10,12 @@ CPU (nexus — any C++17, MSVC shown; clang++/g++ parity required like ASTRA-7):
 cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 nexus\tiny_nexus.cpp /Fe:build\tiny_nexus.exe'
 ```
 
+CPU (substrate_nexus — v2 N0 spherical EKG oracle; stdlib only, **no GPU** — runs under any card contention):
+
+```
+cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 substrate\substrate_nexus.cpp /Fe:build\substrate_nexus.exe'
+```
+
 CUDA — the app (from M2 it links liborrery's envelope + cuFFT; cufft64 runtime dll comes from the toolkit redist, D-014):
 
 ```

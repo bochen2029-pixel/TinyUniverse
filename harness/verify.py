@@ -9,10 +9,15 @@ import subprocess, sys, os, time
 VCVARS = r'"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"'
 BUILDS = [
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo nexus\\tiny_nexus.cpp /Fe:build\\tiny_nexus.exe /Fo:build\\tiny_nexus.obj',
+    f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\\substrate_nexus.cpp /Fe:build\\substrate_nexus.exe /Fo:build\\substrate_nexus.obj',
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\tinyuniverse.exe app\\tinyuniverse.cu core\\lib\\envelope.cpp user32.lib gdi32.lib opengl32.lib cufft.lib',
 ]
+# CPU fp64 oracles (no GPU) run regardless of card contention; GPU goldens follow the preflight.
+CPU_GOLDENS = [
+    ("nexus",           [r"build\tiny_nexus.exe", "--golden"]),
+    ("substrate_nexus", [r"build\substrate_nexus.exe", "--golden"]),   # v2 N0 (spherical EKG)
+]
 GOLDENS = [
-    ("nexus",     [r"build\tiny_nexus.exe", "--golden"]),
     ("kepler",    [r"build\tinyuniverse.exe", "--scenario", "kepler",    "--golden"]),
     ("threebody", [r"build\tinyuniverse.exe", "--scenario", "threebody", "--golden"]),
     ("cloud",     [r"build\tinyuniverse.exe", "--scenario", "cloud",     "--golden"]),
@@ -54,28 +59,41 @@ def gpu_preflight(min_free_mb=2000):
     print(f"[preflight] GPU ok: {free_mb} MB VRAM free")
     return True
 
+def run_goldens(goldens):
+    red = 0
+    for name, cmd in goldens:
+        t = time.time()
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        ok = (r.returncode == 0) and ("GOLDEN OK" in (r.stderr or ""))
+        print(f"  {name:<16} {'GREEN' if ok else 'RED':<6} {time.time()-t:6.1f}s"
+              + ("" if ok else f"  (exit={r.returncode})"))
+        if not ok:
+            red += 1
+            tail = (r.stderr or "").strip().splitlines()[-3:]
+            for ln in tail: print(f"      {ln}")
+    return red
+
 def main():
-    if not gpu_preflight():
-        return 3
     if "--build" in sys.argv:
         for cmd in BUILDS:
             print(f"[build] {cmd[:80]}...")
             r = subprocess.run(f'cmd /c \'{cmd}\'' if os.name != "nt" else cmd, shell=True)
             if r.returncode != 0:
                 print("[build] FAILED"); return 1
-    red = 0
     t0 = time.time()
-    for name, cmd in GOLDENS:
-        t = time.time()
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        ok = (r.returncode == 0) and ("GOLDEN OK" in (r.stderr or ""))
-        print(f"  {name:<10} {'GREEN' if ok else 'RED':<6} {time.time()-t:6.1f}s"
-              + ("" if ok else f"  (exit={r.returncode})"))
-        if not ok:
-            red += 1
-            tail = (r.stderr or "").strip().splitlines()[-3:]
-            for ln in tail: print(f"      {ln}")
-    print(f"{'-'*40}\n  {'ALL GREEN' if red == 0 else f'{red} RED'}  ({time.time()-t0:.0f}s total)")
+    print("[cpu] fp64 oracles (GPU-independent):")
+    red = run_goldens(CPU_GOLDENS)              # nexus + substrate_nexus run under any contention
+    gpu_ok = gpu_preflight()
+    if gpu_ok:
+        print("[gpu] scenario goldens:")
+        red += run_goldens(GOLDENS)
+    n = len(CPU_GOLDENS) + (len(GOLDENS) if gpu_ok else 0)
+    print("-"*40)
+    if not gpu_ok:                              # CPU oracles still reported; GPU suite deferred
+        print(f"  CPU {'ALL GREEN' if red==0 else f'{red} RED'}; GPU goldens SKIPPED "
+              f"(card contended, exit 3)  ({time.time()-t0:.0f}s)")
+        return 1 if red else 3
+    print(f"  {'ALL GREEN' if red == 0 else f'{red} RED'}  ({n} goldens, {time.time()-t0:.0f}s total)")
     return 0 if red == 0 else 1
 
 if __name__ == "__main__":
