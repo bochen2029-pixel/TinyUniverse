@@ -1,6 +1,6 @@
 # RUN_STATE.md
 
-**As of:** 2026-07-12 · **Milestone:** M7 `cosmos` (NOT STARTED) · **State:** M6 CLOSED — quantum mechanics is real here. **18/18 goldens GREEN** (harness 199 s on a contended card; bit-exact under 100% GPU contention — D-018).
+**As of:** 2026-07-11 · **Milestone:** M7 `cosmos` (PHYSICS GREEN, art pass in flight) · **State:** contract frozen (`contracts/cosmos.contract.md` v1.0.0) · torus wrap always-on + min-image everywhere · **21/21 goldens GREEN in 105 s** (3 new: circumnav `3f18f02c` · expand `ce448f2b` · bubbles `78b753f1`; 5 superseded under wrap/D-019: cloud galaxy merger collapse photons; 13 byte-identical incl. the echo). Next concrete action: little-planet + light-history signature shot → CINEMATIC gate → docs close.
 
 ## What M6 established
 

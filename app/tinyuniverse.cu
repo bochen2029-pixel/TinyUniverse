@@ -37,6 +37,7 @@
 #include <vector>
 #include <string>
 #include <cufft.h>
+#include <cuda_fp16.h>
 #include <complex>
 #include "../core/lib/rng.cuh"
 #include "../core/lib/reduce.cuh"
@@ -56,17 +57,25 @@ enum Scenario { SC_GALAXY = 0, SC_KEPLER, SC_THREEBODY, SC_CLOUD,
                 SC_MERGER, SC_ECHO, SC_RATCHET, SC_DETECTOR,
                 SC_KEPREL, SC_CLOCKS, SC_PHOTONS,
                 SC_COLLAPSE, SC_ISCO, SC_HAWKING,
-                SC_DOUBLESLIT, SC_TUNNELING, SC_SHOQ };
+                SC_DOUBLESLIT, SC_TUNNELING, SC_SHOQ,
+                SC_CIRCUMNAV, SC_EXPAND, SC_BUBBLES };
 enum Solver   { SOLV_PM = 0, SOLV_DIRECT, SOLV_TINY, SOLV_NONE };
-static const char* SC_NAME[17] = {"galaxy", "kepler", "threebody", "cloud",
+static const char* SC_NAME[20] = {"galaxy", "kepler", "threebody", "cloud",
                                   "merger", "echo", "ratchet", "detector",
                                   "keprel", "clocks", "photons",
                                   "collapse", "isco", "hawking",
-                                  "doubleslit", "tunneling", "shoq"};
+                                  "doubleslit", "tunneling", "shoq",
+                                  "circumnav", "expand", "bubbles"};
 // planck contract: psi engine (2D 256^2 over a 64x64 su window)
 #define QN   256
 #define QL   64.0f
 #define QDX  (QL/QN)
+// cosmos contract: roaming 3D bubbles (64^3 over a 16^3 su window, dx = 0.25)
+#define QB    64
+#define QB3   (QB*QB*QB)
+#define QBL   16.0f
+#define QBDX  (QBL/QB)
+#define NBUB  16
 // gargantua contract: BH constants (dial-derived)
 #define NBH_MAX  8
 #define RS_PER_M 1.0e-5f                   // 2G/c^2
@@ -104,6 +113,10 @@ struct RP {
     // M5: screen-space BH lenses (render-res pixels; visuals non-declared)
     int   nLens;
     float lensX[4], lensY[4], lensTE2[4], lensShadow[4];
+    // M7 cosmos: projection + light-history (visuals non-declared)
+    int   proj;            // 0 perspective, 1 stereographic little planet
+    float lpR;             // little-planet horizon radius in render px
+    int   histN, histHead, histDepth;   // valid snapshots / ring head / ring size
 };
 
 // ----------------------------------------------------------------------------
@@ -217,6 +230,23 @@ __global__ void kInit(float4* pos, float4* mom, float* tau, unsigned* regime,
     regime[i] = 0x02u;                                // CLASSICAL (derived; inert scene)
 }
 
+// M7 cosmos: Zel'dovich growing-mode lattice (expand scenario; cosmos contract).
+// 100^3 lattice, single mode k1 along x, displacement psi = Ad*sin(k1*q),
+// growing-mode peculiar velocity v = H0*psi at a = 1 (EdS f = 1). No RNG.
+__global__ void kInitZeldovich(float4* pos, float4* mom, float* tau, unsigned* regime,
+                               float Ad, float k1, float H0){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= 1000000) return;
+    int ix = i % 100, iy = (i/100) % 100, iz = i/10000;
+    float qx = -256.0f + (ix + 0.5f)*5.12f;
+    float qy = -256.0f + (iy + 0.5f)*5.12f;
+    float qz = -256.0f + (iz + 0.5f)*5.12f;
+    float psi = Ad*sinf(k1*qx);
+    pos[i] = make_float4(qx + psi, qy, qz, 5600.0f);   // uniform fog; structure will heat it visually
+    mom[i] = make_float4(H0*psi, 0, 0, 1.0f);          // p = a^2 x_dot = v at a=1, m=1
+    tau[i] = 0.0f; regime[i] = 0x02u;
+}
+
 __global__ void kInitCloud(float4* pos, float4* mom, float* tau, unsigned* regime,
                            int N, unsigned long long seed, float R, float sigFrac){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
@@ -272,24 +302,38 @@ __global__ void kKick(float4* mom, const float4* acc, const unsigned* regime,
 }
 __global__ void kDriftK(const float4* pin, float4* pout, float4* perr,
                         const float4* mom, float* tau, unsigned* regime,
-                        const float* phi, int N, float dt, float invc2){
+                        const float* phi, int N, float dt, float invc2, float ds,
+                        const unsigned* partBub){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
     if (regime[i] & REG_DEAD){                        // absorbed: park out of the box
         pout[i] = make_float4(1.0e6f + (float)i*1.0e-3f, 0, 0, pin[i].w);
         return;
     }
+    if (partBub && partBub[i]){                       // bubbled: classical drift + tau suspend
+        pout[i] = pin[i];                             // (declared tau-gap, cosmos contract)
+        return;
+    }
     float4 p = pin[i], m = mom[i], e = perr[i];
     float3 v = velOf(m);
-    float3 d = make_float3(v.x*dt, v.y*dt, v.z*dt);
+    float ddt = dt*ds;                                // ds = 1/a^2 in expand mode, else exactly 1
+    float3 d = make_float3(v.x*ddt, v.y*ddt, v.z*ddt);
     float y, t;
     y = d.x - e.x; t = p.x + y; e.x = (t - p.x) - y; p.x = t;
     y = d.y - e.y; t = p.y + y; e.y = (t - p.y) - y; p.y = t;
     y = d.z - e.z; t = p.z + y; e.z = (t - p.z) - y; p.z = t;
+    // M7: canonical torus coordinates [-256, 256). +/-512 is exact fp32 near the
+    // seam (power of two), so wrapping is bit-reversible; max speed c => at most
+    // one crossing per tick. Kahan compensation survives an exact-op shift.
+    if      (p.x >=  256.0f) p.x -= 512.0f; else if (p.x < -256.0f) p.x += 512.0f;
+    if      (p.y >=  256.0f) p.y -= 512.0f; else if (p.y < -256.0f) p.y += 512.0f;
+    if      (p.z >=  256.0f) p.z -= 512.0f; else if (p.z < -256.0f) p.z += 512.0f;
     pout[i] = p; perr[i] = e;
     float v2 = v.x*v.x + v.y*v.y + v.z*v.z;
     float ph = phi ? phiAt(phi, p) : 0.0f;            // tick-lagged Phi (declared)
-    tau[i] += dt * sqrtf(fmaxf(1.0f + (2.0f*ph - v2)*invc2, 0.0f));   // photons: 0 — light does not age
+    if (m.w > 0.0f)                                   // photons structurally ageless (einstein
+        tau[i] += dt * sqrtf(fmaxf(1.0f + (2.0f*ph - v2)*invc2, 0.0f));   // contract; the fp32
+                                                      // clamp leaks ~2e-4/tick at v = c — D-019
     unsigned sp = (m.w == 0.0f) ? (0x20u | 0x04u) : ((v2 > REL_V2) ? 0x04u : 0x02u);
     regime[i] = (regime[i] & 0xC0u) | sp;
 }
@@ -300,6 +344,33 @@ __global__ void kZeroFix(unsigned long long* g, int n){
     if (i < n) g[i] = 0ull;
 }
 __device__ __forceinline__ int wrapc(int c){ return c & (PMN - 1); }
+// M7 cosmos: minimum-image separation on the 3-torus. 512 = 2^9, so the scale,
+// round, and shift are all exact fp32 ops; for |d| < 256 the result is bit-identical d.
+__host__ __device__ __forceinline__ float mimg(float d){ return d - 512.0f*roundf(d*(1.0f/512.0f)); }
+// M7 cosmos: shared camera projection. proj 0 = perspective (fd = view depth),
+// proj 1 = stereographic little planet from the nadir antipode (fd = true distance).
+__device__ __forceinline__ bool projCam(const RP& rp, float rx, float ry, float rz,
+                                        float& px, float& py, float& fd){
+    float cx = rx*rp.rgt[0] + ry*rp.rgt[1] + rz*rp.rgt[2];
+    float cy = rx*rp.upv[0] + ry*rp.upv[1] + rz*rp.upv[2];
+    float cz = rx*rp.fwd[0] + ry*rp.fwd[1] + rz*rp.fwd[2];
+    if (rp.proj == 0){
+        if (cz < 1.0f) return false;
+        px = ((cx/(cz*rp.tf*rp.aspect))*0.5f + 0.5f)*rp.RW - 0.5f;
+        py = (0.5f - (cy/(cz*rp.tf))*0.5f)*rp.RH - 0.5f;
+        fd = cz;
+        return true;
+    }
+    float D = sqrtf(rx*rx + ry*ry + rz*rz + 1e-12f);
+    float id = 1.0f/D;
+    float cd = cz*id;                                 // cos(angle from nadir)
+    if (cd < -0.985f) return false;                   // zenith blowup guard
+    float s = 1.0f/(1.0f + cd);
+    px = rp.RW*0.5f + (cx*id)*s*rp.lpR - 0.5f;
+    py = rp.RH*0.5f - (cy*id)*s*rp.lpR - 0.5f;
+    fd = D;
+    return true;
+}
 __global__ void kDeposit(const float4* pos, const float4* mom, const unsigned* regime,
                          int N, unsigned long long* g){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
@@ -322,7 +393,7 @@ __global__ void kFixToReal(const unsigned long long* g, float* r, int n){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i < n) r[i] = (float)orrery::fixed_decode((long long)g[i]);
 }
-__global__ void kGreen(cufftComplex* s){
+__global__ void kGreen(cufftComplex* s, float pref){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     int total = PMN*PMN*PMNZC;
     if (i >= total) return;
@@ -335,6 +406,7 @@ __global__ void kGreen(cufftComplex* s){
     float f = (k2 > 0.0f)
         ? -4.0f*PI_F*G_DIAL/(k2 * (CELL*CELL*CELL) * (float)(PMN*PMN*PMN))
         : 0.0f;                                       // k=0: mean density does not gravitate
+    f *= pref;                                        // comoving Poisson x1/a (expand); 1 otherwise
     s[i].x *= f; s[i].y *= f;
 }
 __global__ void kForceGrid(const float* phi, float4* F){
@@ -395,7 +467,7 @@ __global__ void kDirect(const float4* pos, const float4* mom, float4* acc, int N
     for (int j = 0; j < N; j++){
         if (j == i) continue;
         float4 pj = pos[j];
-        float dx = pj.x - pi.x, dy = pj.y - pi.y, dz = pj.z - pi.z;
+        float dx = mimg(pj.x - pi.x), dy = mimg(pj.y - pi.y), dz = mimg(pj.z - pi.z);
         float r2 = dx*dx + dy*dy + dz*dz + 1e-6f;
         float ir = rsqrtf(r2);
         float f = G_DIAL*mom[j].w*ir*ir*ir;
@@ -599,7 +671,7 @@ __global__ void kBHForce(const float4* pos, unsigned* regime, float4* acc, int N
     for (int b = 0; b < nbh; b++){
         float4 bp = bhpos[b];
         float rs = bhmom[b].w;
-        float dx = bp.x - p.x, dy = bp.y - p.y, dz = bp.z - p.z;
+        float dx = mimg(bp.x - p.x), dy = mimg(bp.y - p.y), dz = mimg(bp.z - p.z);
         float r = sqrtf(dx*dx + dy*dy + dz*dz + 1e-12f);
         float d = fmaxf(r - rs, 0.05f);
         float g = G_DIAL*bp.w/(d*d);
@@ -621,7 +693,7 @@ __global__ void kAbsorb(const float4* pos, const float4* mom, unsigned* regime, 
         float4 bp = bhpos[b];
         float rs = bhmom[b].w;
         float cap = fmaxf(1.2f*rs, (bp.w < M_FORM) ? 0.75f*CELL : 0.3f);
-        float dx = p.x - bp.x, dy = p.y - bp.y, dz = p.z - bp.z;
+        float dx = mimg(p.x - bp.x), dy = mimg(p.y - bp.y), dz = mimg(p.z - bp.z);
         if (dx*dx + dy*dy + dz*dz < cap*cap){
             regime[i] |= REG_DEAD;
             orrery::fixed_atomic_add(&bhacc[b*4 + 0], (double)m.w);
@@ -657,7 +729,7 @@ __global__ void kBHSpawn(unsigned long long* argmax, float4* bhpos, float4* bhmo
     float y = -BOXL*0.5f + (cy + 0.5f)*CELL;
     float z = -BOXL*0.5f + (cz + 0.5f)*CELL;
     for (unsigned b = 0; b < n; b++){
-        float dx = bhpos[b].x - x, dy = bhpos[b].y - y, dz = bhpos[b].z - z;
+        float dx = mimg(bhpos[b].x - x), dy = mimg(bhpos[b].y - y), dz = mimg(bhpos[b].z - z);
         if (dx*dx + dy*dy + dz*dz < 64.0f) return;     // existing BH owns this core
     }
     bhpos[n] = make_float4(x, y, z, 0.0f);             // seed mass 0: formation-tick capture binds the core
@@ -712,7 +784,7 @@ __global__ void kBHStep(float4* bhpos, float4* bhmom, unsigned long long* bhacc,
             }
             for (unsigned o = 0; o < n; o++){
                 if (o == b || bhpos[o].w <= 0.0f) continue;
-                float dx = bhpos[o].x - bp.x, dy = bhpos[o].y - bp.y, dz = bhpos[o].z - bp.z;
+                float dx = mimg(bhpos[o].x - bp.x), dy = mimg(bhpos[o].y - bp.y), dz = mimg(bhpos[o].z - bp.z);
                 float r2 = dx*dx + dy*dy + dz*dz + 1.0f;
                 float ir = rsqrtf(r2);
                 float gg = G_DIAL*bhpos[o].w*ir*ir*ir;
@@ -721,6 +793,9 @@ __global__ void kBHStep(float4* bhpos, float4* bhmom, unsigned long long* bhacc,
             bm.x += bp.w*g.x*dt; bm.y += bp.w*g.y*dt; bm.z += bp.w*g.z*dt;
             float im = 1.0f/bp.w;
             bp.x += bm.x*im*dt; bp.y += bm.y*im*dt; bp.z += bm.z*im*dt;
+            if      (bp.x >=  256.0f) bp.x -= 512.0f; else if (bp.x < -256.0f) bp.x += 512.0f;
+            if      (bp.y >=  256.0f) bp.y -= 512.0f; else if (bp.y < -256.0f) bp.y += 512.0f;
+            if      (bp.z >=  256.0f) bp.z -= 512.0f; else if (bp.z < -256.0f) bp.z += 512.0f;
         }
         bm.w = fmaxf(RS_PER_M*bp.w, 0.0f);             // r_s cache
         bhpos[b] = bp; bhmom[b] = bm;
@@ -769,32 +844,35 @@ __global__ void kLens(const float4* src, float4* dst, int W, int H, RP rp){
     dst[y*W + x] = o;
 }
 // Hawking glow: BHs splat as blackbody points at their horizon temperature
+// (M7: all 27 periodic images; no history — the hole itself is bright "now")
 __global__ void kSplatBH(const float4* bhpos, int nbh, float4* hdr, RP rp){
     int b = blockIdx.x*blockDim.x + threadIdx.x;
     if (b >= nbh) return;
     float4 p = bhpos[b];
     if (p.w <= 0.0f) return;
-    float rx = p.x - rp.cpos[0], ry = p.y - rp.cpos[1], rz = p.z - rp.cpos[2];
-    float cz = rx*rp.fwd[0] + ry*rp.fwd[1] + rz*rp.fwd[2];
-    if (cz < 1.0f) return;
-    float cx = rx*rp.rgt[0] + ry*rp.rgt[1] + rz*rp.rgt[2];
-    float cy = rx*rp.upv[0] + ry*rp.upv[1] + rz*rp.upv[2];
-    float px = ((cx/(cz*rp.tf*rp.aspect))*0.5f + 0.5f)*rp.RW - 0.5f;
-    float py = (0.5f - (cy/(cz*rp.tf))*0.5f)*rp.RH - 0.5f;
-    if (px < 2 || py < 2 || px >= rp.RW - 3 || py >= rp.RH - 3) return;
+    float bx = mimg(p.x - rp.cpos[0]);
+    float by = mimg(p.y - rp.cpos[1]);
+    float bz = mimg(p.z - rp.cpos[2]);
     float TH = 79577.0f/p.w;                           // horizon temperature (energy units)
     float Tdisp = clampf(TH*40.0f, 1200.0f, 39000.0f);
-    float flux = 40.0f*(250.0f/p.w)*(250.0f/p.w)*4200.0f/(cz*cz + 25.0f);
     float bb[3]; blackbody(Tdisp, bb);
-    int x0 = (int)px, y0 = (int)py;
-    for (int oy = -1; oy <= 1; oy++)
-        for (int ox = -1; ox <= 1; ox++){
-            float w = expf(-0.5f*(ox*ox + oy*oy));
-            float4* h = &hdr[(y0+oy)*rp.RW + x0 + ox];
-            atomicAdd(&h->x, bb[0]*flux*w);
-            atomicAdd(&h->y, bb[1]*flux*w);
-            atomicAdd(&h->z, bb[2]*flux*w);
-        }
+    for (int oz = -1; oz <= 1; oz++)
+    for (int oy2 = -1; oy2 <= 1; oy2++)
+    for (int ox2 = -1; ox2 <= 1; ox2++){
+        float px, py, fd;
+        if (!projCam(rp, bx + 512.0f*ox2, by + 512.0f*oy2, bz + 512.0f*oz, px, py, fd)) continue;
+        if (px < 2 || py < 2 || px >= rp.RW - 3 || py >= rp.RH - 3) continue;
+        float flux = 40.0f*(250.0f/p.w)*(250.0f/p.w)*4200.0f/(fd*fd + 25.0f);
+        int x0 = (int)px, y0 = (int)py;
+        for (int oy = -1; oy <= 1; oy++)
+            for (int ox = -1; ox <= 1; ox++){
+                float w = expf(-0.5f*(ox*ox + oy*oy));
+                float4* h = &hdr[(y0+oy)*rp.RW + x0 + ox];
+                atomicAdd(&h->x, bb[0]*flux*w);
+                atomicAdd(&h->y, bb[1]*flux*w);
+                atomicAdd(&h->z, bb[2]*flux*w);
+            }
+    }
 }
 
 // --- M6 planck: psi engine (2D 256^2 split-step; planck contract) ---
@@ -865,44 +943,248 @@ __global__ void kQNormAcc(const cufftComplex* q, unsigned long long* acc){
     orrery::fixed_atomic_add(acc, (double)q[idx].x*q[idx].x + (double)q[idx].y*q[idx].y);
 }
 
+// --- M7 cosmos: 3D bubble kernels (cosmos contract; M6 split-step lineage) ---
+// grid coords are bubble-local: r = -QBL/2 + (i + 0.5)*QBDX, center = owner at spawn
+__global__ void kQ3Gauss(cufftComplex* q, float kx, float ky, float kz, float s0){
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= QB3) return;
+    int ix = idx % QB, iy = (idx/QB) % QB, iz = idx/(QB*QB);
+    float x = -QBL*0.5f + (ix + 0.5f)*QBDX;
+    float y = -QBL*0.5f + (iy + 0.5f)*QBDX;
+    float z = -QBL*0.5f + (iz + 0.5f)*QBDX;
+    float env = expf(-0.25f*(x*x + y*y + z*z)/(s0*s0));
+    float ph = kx*x + ky*y + kz*z;
+    q[idx].x = env*cosf(ph);
+    q[idx].y = env*sinf(ph);
+}
+__global__ void kQ3PhaseK(cufftComplex* q, int total, float coef){   // e^{-i coef k^2}, all slots
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= total) return;
+    int c = idx % QB3;
+    int ix = c % QB, iy = (c/QB) % QB, iz = c/(QB*QB);
+    int fx = (ix <= QB/2) ? ix : ix - QB;
+    int fy = (iy <= QB/2) ? iy : iy - QB;
+    int fz = (iz <= QB/2) ? iz : iz - QB;
+    float kf = 2.0f*PI_F/QBL;
+    float k2 = kf*kf*(float)(fx*fx + fy*fy + fz*fz);
+    float ph = -coef*k2;
+    float cs = cosf(ph), sn = sinf(ph);
+    cufftComplex v = q[idx];
+    q[idx].x = v.x*cs - v.y*sn;
+    q[idx].y = v.x*sn + v.y*cs;
+}
+__global__ void kQ3Edge(cufftComplex* q, int total, const float* edge){
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= total) return;
+    float m = edge[idx % QB3];
+    q[idx].x *= m; q[idx].y *= m;
+}
+__global__ void kQ3Scale(cufftComplex* q, int total, float s){
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= total) return;
+    q[idx].x *= s; q[idx].y *= s;
+}
+__global__ void kQ3NormAcc(const cufftComplex* q, unsigned long long* acc){
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= QB3) return;
+    orrery::fixed_atomic_add(acc, (double)q[idx].x*q[idx].x + (double)q[idx].y*q[idx].y);
+}
+// isolation: a massive, live, non-bubbled particle whose 3^3 PM-cell neighborhood
+// holds no deposited mass but its own (fixed-point exact compare; cosmos contract)
+__global__ void kBubIso(const float4* pos, const float4* mom, const unsigned* regime,
+                        const unsigned* partBub, int N, const unsigned long long* fix,
+                        unsigned char* iso){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    iso[i] = 0;
+    if (mom[i].w <= 0.0f) return;
+    if (regime[i] & REG_DEAD) return;
+    if (regime[i] & 0x40u) return;    // RECORDED stays classical: its which-path is
+                                      // inscribed in the environment (M3 semantics)
+    if (partBub[i]) return;
+    float4 p = pos[i];
+    int cx = (int)floorf((p.x + BOXL*0.5f)/CELL);
+    int cy = (int)floorf((p.y + BOXL*0.5f)/CELL);
+    int cz = (int)floorf((p.z + BOXL*0.5f)/CELL);
+    double msum = 0.0;
+    for (int dz = -1; dz <= 1; dz++)
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+                msum += orrery::fixed_decode((long long)
+                    fix[(wrapc(cx + dx)*PMN + wrapc(cy + dy))*PMN + wrapc(cz + dz)]);
+    if (msum - (double)mom[i].w < 0.5) iso[i] = 1;
+}
+// single-thread slot assignment in ascending particle id (deterministic)
+__global__ void kBubSpawnScan(const unsigned char* iso, const float4* pos,
+                              unsigned* regime, unsigned* partBub, int N,
+                              int* bubOwner, float4* bubCtr, unsigned* bubRec,
+                              int* newList, int* newCount){
+    if (threadIdx.x || blockIdx.x) return;
+    int nn = 0;
+    for (int i = 0; i < N && nn < NBUB; i++){
+        if (!iso[i] || partBub[i]) continue;
+        int slot = -1;
+        for (int s = 0; s < NBUB; s++) if (bubOwner[s] < 0){ slot = s; break; }
+        if (slot < 0) break;
+        bubOwner[slot] = i;
+        bubCtr[slot] = pos[i];                        // xyz = grid center; w carries emitT
+        bubRec[slot] = 0u;
+        partBub[i] = (unsigned)(slot + 1);
+        regime[i] = (regime[i] & 0xC0u) | 0x01u;      // QUANTUM (latches preserved)
+        newList[nn++] = slot;
+    }
+    *newCount = nn;
+}
+// intrusion: any foreign massive live particle inside a bubble's window this tick
+__global__ void kBubIntrude(const float4* pos, const float4* mom, const unsigned* regime,
+                            const unsigned* partBub, int N, const int* bubOwner,
+                            const float4* bubCtr, unsigned* bubFlag){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    if (mom[i].w <= 0.0f) return;
+    if (regime[i] & REG_DEAD) return;
+    if (partBub[i]) return;
+    float4 p = pos[i];
+    for (int s = 0; s < NBUB; s++){
+        if (bubOwner[s] < 0) continue;
+        float4 c = bubCtr[s];
+        if (fabsf(mimg(p.x - c.x)) < QBL*0.5f &&
+            fabsf(mimg(p.y - c.y)) < QBL*0.5f &&
+            fabsf(mimg(p.z - c.z)) < QBL*0.5f) atomicOr(&bubFlag[s], 1u);
+    }
+}
+// per-tick record walk: strong write (+1 per intruded tick); collapse past threshold
+__global__ void kBubTick(const int* bubOwner, unsigned* bubRec, unsigned* bubFlag,
+                         unsigned* bubPend){
+    if (threadIdx.x || blockIdx.x) return;
+    unsigned pend = 0;
+    for (int s = 0; s < NBUB; s++){
+        if (bubOwner[s] >= 0 && bubFlag[s]){
+            bubRec[s]++;
+            if (bubRec[s] >= REC_THRESH) pend |= (1u << s);
+        }
+        bubFlag[s] = 0u;
+    }
+    *bubPend = pend;
+}
+
 __global__ void kClear(float4* hdr, int n){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i < n) hdr[i] = make_float4(0, 0, 0, 0);
 }
 
-__global__ void kSplat(const float4* pos, const unsigned* reg, int N, float4* hdr, RP rp){
+// M7 cosmos: torus-aware splat — 27 periodic images around the minimum image,
+// each sampled from the light-history ring at retarded time t - D/c (one
+// refinement pass; visuals non-declared, cosmos contract).
+__global__ void kSplat(const float4* pos, const unsigned* reg, int N, float4* hdr, RP rp,
+                       const ushort4* hist){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
     float4 p = pos[i];
     if (reg && (reg[i] & REG_DEAD)) return;                    // absorbed: not rendered
-    if (reg && (reg[i] & 0x40u)) p.w = fmaxf(p.w, 13000.0f);   // RECORDED: blue-white tint
-    float rx = p.x - rp.cpos[0], ry = p.y - rp.cpos[1], rz = p.z - rp.cpos[2];
-    float cz = rx*rp.fwd[0] + ry*rp.fwd[1] + rz*rp.fwd[2];
-    if (cz < 1.0f) return;
-    float cx = rx*rp.rgt[0] + ry*rp.rgt[1] + rz*rp.rgt[2];
-    float cy = rx*rp.upv[0] + ry*rp.upv[1] + rz*rp.upv[2];
-    float ndx = cx / (cz * rp.tf * rp.aspect);
-    float ndy = cy / (cz * rp.tf);
-    float px = (ndx*0.5f + 0.5f) * rp.RW - 0.5f;
-    float py = (0.5f - ndy*0.5f) * rp.RH - 0.5f;
-    if (px < 0 || py < 0 || px >= rp.RW - 1 || py >= rp.RH - 1) return;
-    float T = p.w;
-    float L = rp.mode ? powf(T/5800.0f, 4.0f)         // physical: L ~ T^4
-                      : powf(T/5800.0f, 2.2f);        // cinematic: softened
-    float flux = 4200.0f * L / (cz*cz + 25.0f);
-    float bb[3]; blackbody(T, bb);
-    int x0 = (int)px, y0 = (int)py;
-    float fx = px - x0, fy = py - y0;
-    float w00 = (1-fx)*(1-fy), w10 = fx*(1-fy), w01 = (1-fx)*fy, w11 = fx*fy;
-    float4* h;
-    h = &hdr[y0*rp.RW + x0];
-    atomicAdd(&h->x, bb[0]*flux*w00); atomicAdd(&h->y, bb[1]*flux*w00); atomicAdd(&h->z, bb[2]*flux*w00);
-    h = &hdr[y0*rp.RW + x0 + 1];
-    atomicAdd(&h->x, bb[0]*flux*w10); atomicAdd(&h->y, bb[1]*flux*w10); atomicAdd(&h->z, bb[2]*flux*w10);
-    h = &hdr[(y0+1)*rp.RW + x0];
-    atomicAdd(&h->x, bb[0]*flux*w01); atomicAdd(&h->y, bb[1]*flux*w01); atomicAdd(&h->z, bb[2]*flux*w01);
-    h = &hdr[(y0+1)*rp.RW + x0 + 1];
-    atomicAdd(&h->x, bb[0]*flux*w11); atomicAdd(&h->y, bb[1]*flux*w11); atomicAdd(&h->z, bb[2]*flux*w11);
+    if (reg && (reg[i] & 0x01u)) return;                       // bubbled: the cloud renders, not the dot
+    bool rec = reg && (reg[i] & 0x40u);
+    float bx = mimg(p.x - rp.cpos[0]);
+    float by = mimg(p.y - rp.cpos[1]);
+    float bz = mimg(p.z - rp.cpos[2]);
+    for (int oz = -1; oz <= 1; oz++)
+    for (int oy = -1; oy <= 1; oy++)
+    for (int ox = -1; ox <= 1; ox++){
+        float rx = bx + 512.0f*ox, ry = by + 512.0f*oy, rz = bz + 512.0f*oz;
+        float px, py, fd;
+        if (!projCam(rp, rx, ry, rz, px, py, fd)) continue;    // pre-cull on current pos
+        float T = p.w;
+        if (hist && rp.histN > 0){
+            float D = sqrtf(rx*rx + ry*ry + rz*rz);
+            int back = (int)(D*0.5f + 0.5f);          // 24-tick snapshots = 2 su light travel
+            if (back > 0){
+                if (back > rp.histN) back = rp.histN;
+                int slot = rp.histHead - (back - 1); if (slot < 0) slot += rp.histDepth;
+                ushort4 h = hist[(size_t)slot*N + i];
+                float hx = __half2float(__ushort_as_half(h.x));
+                float hy = __half2float(__ushort_as_half(h.y));
+                float hz = __half2float(__ushort_as_half(h.z));
+                if (fabsf(hx) > 300.0f) continue;     // parked at that epoch (absorbed)
+                rx = mimg(hx - rp.cpos[0]) + 512.0f*ox;
+                ry = mimg(hy - rp.cpos[1]) + 512.0f*oy;
+                rz = mimg(hz - rp.cpos[2]) + 512.0f*oz;
+                float D2 = sqrtf(rx*rx + ry*ry + rz*rz);
+                int back2 = (int)(D2*0.5f + 0.5f);    // one retarded-time refinement
+                if (back2 > rp.histN) back2 = rp.histN;
+                if (back2 > 0 && back2 != back){
+                    slot = rp.histHead - (back2 - 1); if (slot < 0) slot += rp.histDepth;
+                    h = hist[(size_t)slot*N + i];
+                    hx = __half2float(__ushort_as_half(h.x));
+                    hy = __half2float(__ushort_as_half(h.y));
+                    hz = __half2float(__ushort_as_half(h.z));
+                    if (fabsf(hx) > 300.0f) continue;
+                    rx = mimg(hx - rp.cpos[0]) + 512.0f*ox;
+                    ry = mimg(hy - rp.cpos[1]) + 512.0f*oy;
+                    rz = mimg(hz - rp.cpos[2]) + 512.0f*oz;
+                }
+                T = __half2float(__ushort_as_half(h.w));
+                if (!projCam(rp, rx, ry, rz, px, py, fd)) continue;
+            }
+        }
+        if (rec) T = fmaxf(T, 13000.0f);              // RECORDED: blue-white tint
+        if (px < 0 || py < 0 || px >= rp.RW - 1 || py >= rp.RH - 1) continue;
+        float L = rp.mode ? powf(T/5800.0f, 4.0f)     // physical: L ~ T^4
+                          : powf(T/5800.0f, 2.2f);    // cinematic: softened
+        float flux = 4200.0f * L / (fd*fd + 25.0f);
+        float bb[3]; blackbody(T, bb);
+        int x0 = (int)px, y0 = (int)py;
+        float fx = px - x0, fy = py - y0;
+        float w00 = (1-fx)*(1-fy), w10 = fx*(1-fy), w01 = (1-fx)*fy, w11 = fx*fy;
+        float4* h4;
+        h4 = &hdr[y0*rp.RW + x0];
+        atomicAdd(&h4->x, bb[0]*flux*w00); atomicAdd(&h4->y, bb[1]*flux*w00); atomicAdd(&h4->z, bb[2]*flux*w00);
+        h4 = &hdr[y0*rp.RW + x0 + 1];
+        atomicAdd(&h4->x, bb[0]*flux*w10); atomicAdd(&h4->y, bb[1]*flux*w10); atomicAdd(&h4->z, bb[2]*flux*w10);
+        h4 = &hdr[(y0+1)*rp.RW + x0];
+        atomicAdd(&h4->x, bb[0]*flux*w01); atomicAdd(&h4->y, bb[1]*flux*w01); atomicAdd(&h4->z, bb[2]*flux*w01);
+        h4 = &hdr[(y0+1)*rp.RW + x0 + 1];
+        atomicAdd(&h4->x, bb[0]*flux*w11); atomicAdd(&h4->y, bb[1]*flux*w11); atomicAdd(&h4->z, bb[2]*flux*w11);
+    }
+}
+
+// M7 cosmos: bubbleVis — |psi|^2 volume splat as a hot quantum glow (nearest image;
+// psi is read live off simS: shimmer is non-declared)
+__global__ void kSplatPsi(const cufftComplex* bub, const int* bubOwner, const float4* bubCtr,
+                          float4* hdr, RP rp){
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= NBUB*QB3) return;
+    int s = idx/QB3, c = idx % QB3;
+    if (bubOwner[s] < 0) return;
+    cufftComplex a = bub[idx];
+    float p2 = a.x*a.x + a.y*a.y;
+    if (p2 < 1e-7f) return;
+    float4 ctr = bubCtr[s];
+    int ix = c % QB, iy = (c/QB) % QB, iz = c/(QB*QB);
+    float wx = ctr.x + (-QBL*0.5f + (ix + 0.5f)*QBDX);
+    float wy = ctr.y + (-QBL*0.5f + (iy + 0.5f)*QBDX);
+    float wz = ctr.z + (-QBL*0.5f + (iz + 0.5f)*QBDX);
+    float px, py, fd;
+    if (!projCam(rp, mimg(wx - rp.cpos[0]), mimg(wy - rp.cpos[1]), mimg(wz - rp.cpos[2]),
+                 px, py, fd)) return;
+    if (px < 1 || py < 1 || px >= rp.RW - 2 || py >= rp.RH - 2) return;
+    float flux = 26000.0f*p2*(QBDX*QBDX*QBDX)/(fd*fd + 25.0f);
+    float bb[3]; blackbody(15000.0f, bb);
+    float4* h = &hdr[(int)py*rp.RW + (int)px];
+    atomicAdd(&h->x, bb[0]*flux);
+    atomicAdd(&h->y, bb[1]*flux);
+    atomicAdd(&h->z, bb[2]*flux);
+}
+
+// M7 cosmos: light-history snapshot (half4; parked DEAD positions overflow fp16
+// to +inf and are skipped at sample time)
+__global__ void kSnap(const float4* pos, ushort4* dst, int N){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    float4 p = pos[i];
+    dst[i] = make_ushort4(__half_as_ushort(__float2half(p.x)),
+                          __half_as_ushort(__float2half(p.y)),
+                          __half_as_ushort(__float2half(p.z)),
+                          __half_as_ushort(__float2half(p.w)));
 }
 
 __global__ void kHist(const float4* hdr, int n, unsigned* hist){
@@ -1121,6 +1403,31 @@ static std::string gPsiBytes;                         // final psi (joins declar
 struct QMet { double c_psi, c_dots, c_det, kpk_rel, T, Tref, E, sigx; long long nrec; };
 static QMet gQM = {};
 static double gMTot = 1e6;
+// M7 cosmos: EdS expansion state (cosmos contract). a(t) closed-form, a(0) = 1;
+// H0 from the actual box density: H0 = sqrt(8 pi G rho_bar / 3).
+static bool   gExpand = false;
+static double gH0 = 0.0;
+static double aOfT(double t){ return gExpand ? pow(1.0 + 1.5*gH0*t, 2.0/3.0) : 1.0; }
+// M7 cosmos: roaming 3D bubble state (cosmos contract)
+static cufftComplex *dBub = 0;                        // NBUB x QB^3 grids
+static float    *dBubEdge = 0;                        // shared cos^2 absorber
+static int      *dBubOwner = 0, *dBubNew = 0, *dBubNewCount = 0;
+static float4   *dBubCtr = 0;
+static unsigned *dBubRec = 0, *dBubFlag = 0, *dBubPend = 0;
+static unsigned *dPartBub = 0;                        // per-particle handle (slot+1, 0 = none)
+static unsigned char *dIso = 0;
+static unsigned long long *dBubNorm = 0;
+static cufftHandle planB;
+static bool gBubActive = false, gBubAlloc = false, gBubWant = false;
+static int  hBubOwner[NBUB];
+static unsigned gBubSpawned = 0, gBubCollapsed = 0;
+static int  gBubLive = 0;
+static double gBubSig = 0, gBubSigExp = 0;
+// M7 cosmos: projection + light-history host state (visuals non-declared)
+static int  gProj = 0;                                // 0 perspective, 1 little planet
+static ushort4 *dHistBuf = 0;
+static int  gHistDepth = 0, gHistN = 0, gHistHead = -1;
+static bool gHistOn = false, gWantHist = true;        // false in the headless json/golden face
 struct Met { double KE, PE, E, Px, Py, Pz, Lz; unsigned long long nRel, nCls; };
 static Met  gM0 = {};                                  // meters at t=0
 static double gDE = 0, gDP = 0;                        // HUD drift readouts
@@ -1144,9 +1451,10 @@ static void springStep(Spring& s, float dt){
     s.cur += s.vel*dt;
 }
 static void applyPreset(int i){
-    const float D0[17] = {380.0f, 650.0f, 9.0f, 420.0f, 420.0f, 420.0f,
+    const float D0[20] = {380.0f, 650.0f, 9.0f, 420.0f, 420.0f, 420.0f,
                           300.0f, 120.0f, 45.0f, 260.0f, 260.0f,
-                          90.0f, 25.0f, 30.0f, 50.0f, 50.0f, 50.0f};
+                          90.0f, 25.0f, 30.0f, 50.0f, 50.0f, 50.0f,
+                          300.0f, 700.0f, 260.0f};
     float d = D0[gScenario];
     if (gScenario == SC_DOUBLESLIT && i == 0){        // face the screen plane
         cAz.tgt = 0; cEl.tgt = 6; cDist.tgt = logf(d);
@@ -1181,35 +1489,55 @@ static unsigned hHist[256];
 static void renderFrame(RP& rp){
     int RW = rp.RW, RH = rp.RH, npx = RW*RH;
     // BH mirror + screen-space lens parameters (visuals, non-declared)
+    rp.proj = gProj;
+    rp.lpR = 0.42f*(float)rp.RH;
+    rp.histN = gHistOn ? gHistN : 0;
+    rp.histHead = gHistHead; rp.histDepth = gHistDepth;
     rp.nLens = 0;
     if (gBHActive){
         CUDA_CHECK(cudaMemcpy(&hBHn, dBHn, sizeof hBHn, cudaMemcpyDeviceToHost));
         if (hBHn > 0)
             CUDA_CHECK(cudaMemcpy(hBHpos, dBHpos, hBHn*sizeof(float4), cudaMemcpyDeviceToHost));
-        float pxpr = rp.RH/(2.0f*rp.tf);              // px per radian (vertical, center)
         for (unsigned b = 0; b < hBHn && rp.nLens < 4; b++){
             float4 bp = hBHpos[b];
             if (bp.w <= 0.0f) continue;
-            float rx = bp.x - rp.cpos[0], ry = bp.y - rp.cpos[1], rz = bp.z - rp.cpos[2];
+            float rx = mimg(bp.x - rp.cpos[0]), ry = mimg(bp.y - rp.cpos[1]), rz = mimg(bp.z - rp.cpos[2]);
             float cz = rx*rp.fwd[0] + ry*rp.fwd[1] + rz*rp.fwd[2];
-            if (cz < 2.0f) continue;
             float cx = rx*rp.rgt[0] + ry*rp.rgt[1] + rz*rp.rgt[2];
             float cy = rx*rp.upv[0] + ry*rp.upv[1] + rz*rp.upv[2];
-            float D = sqrtf(rx*rx + ry*ry + rz*rz);
+            float D = sqrtf(rx*rx + ry*ry + rz*rz + 1e-12f);
             float thE = sqrtf(4.0f*G_DIAL*bp.w/((C_LIGHT*C_LIGHT)*D));
+            float lx, ly, pxpr;
+            if (rp.proj == 0){
+                if (cz < 2.0f) continue;
+                lx = ((cx/(cz*rp.tf*rp.aspect))*0.5f + 0.5f)*rp.RW;
+                ly = (0.5f - (cy/(cz*rp.tf))*0.5f)*rp.RH;
+                pxpr = rp.RH/(2.0f*rp.tf);            // px per radian (vertical, center)
+            } else {
+                float cd = cz/D;
+                if (cd < -0.9f) continue;
+                float s = 1.0f/(1.0f + cd);
+                lx = rp.RW*0.5f + (cx/D)*s*rp.lpR;
+                ly = rp.RH*0.5f - (cy/D)*s*rp.lpR;
+                float sig2 = ((cx*cx + cy*cy)/(D*D))*s*s;
+                pxpr = rp.lpR*0.5f*(1.0f + sig2);     // stereographic d(sigma)/d(theta)
+            }
             float tE_px = thE*pxpr;
             int L = rp.nLens++;
-            rp.lensX[L] = ((cx/(cz*rp.tf*rp.aspect))*0.5f + 0.5f)*rp.RW;
-            rp.lensY[L] = (0.5f - (cy/(cz*rp.tf))*0.5f)*rp.RH;
+            rp.lensX[L] = lx;
+            rp.lensY[L] = ly;
             rp.lensTE2[L] = tE_px*tE_px;
             rp.lensShadow[L] = 2.6f*(RS_PER_M*bp.w)/D*pxpr;
         }
     }
     dim3 b1(256), g1((npx + 255)/256);
     kClear<<<g1, b1, 0, prsS>>>(dHdr, npx);
-    kSplat<<<(gN + 255)/256, b1, 0, prsS>>>(dPos[gPub], dRegime, gN, dHdr, rp);
+    kSplat<<<(gN + 255)/256, b1, 0, prsS>>>(dPos[gPub], dRegime, gN, dHdr, rp,
+                                            gHistOn ? dHistBuf : nullptr);
     if (gBHActive && hBHn > 0)
         kSplatBH<<<1, NBH_MAX, 0, prsS>>>(dBHpos, (int)hBHn, dHdr, rp);
+    if (gBubActive && gBubLive > 0)
+        kSplatPsi<<<(NBUB*QB3 + 255)/256, b1, 0, prsS>>>(dBub, dBubOwner, dBubCtr, dHdr, rp);
     const float4* rsrc = dHdr;
     if (rp.nLens > 0){
         dim3 b2l(16, 16), g2l((RW + 15)/16, (RH + 15)/16);
@@ -1268,18 +1596,19 @@ static void drawHud(const RP& rp){
         }
     };
     // physics panel (cyan, left)
-    emit(16, 14, "TINY UNIVERSE M1 FIRST LIGHT", 0);
+    emit(16, 14, "TINY UNIVERSE M7 COSMOS", 0);
     snprintf(line, sizeof line, "N=%d DT=1/240 TICK=%llu", gN, (unsigned long long)gTick);
     emit(16, 32, line, 0);
     snprintf(line, sizeof line, "SIM T=%.1FS  C=20 HBAR=0.5 G=0.002", gSimTime);
     emit(16, 50, line, 0);
     if (gMode) emit(16, 68, "PHYSICAL: L=T4 SAT=1.0 NO CLIP", 0);
     else       emit(16, 68, "CINEMATIC: L=T2.2 SAT=1.2 STRETCH", 0);
-    static const char* SC_HUD[17] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD",
+    static const char* SC_HUD[20] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD",
                                      "MERGER", "ECHO", "RATCHET", "DETECTOR",
                                      "KEPREL", "CLOCKS", "PHOTONS",
                                      "COLLAPSE", "ISCO", "HAWKING",
-                                     "DOUBLESLIT", "TUNNELING", "SHOQ"};
+                                     "DOUBLESLIT", "TUNNELING", "SHOQ",
+                                     "CIRCUMNAV", "EXPAND", "BUBBLES"};
     snprintf(line, sizeof line, "%s %s  DE %+.1E  DP %.1E", SC_HUD[gScenario],
              gSolver == SOLV_PM ? "PM" : (gSolver == SOLV_TINY ? "TINY" :
              (gSolver == SOLV_NONE ? "NONE" : "DIRECT")), gDE, gDP);
@@ -1296,6 +1625,15 @@ static void drawHud(const RP& rp){
             snprintf(line, sizeof line, "BH N=0 (EVAPORATED)");
         emit(16, 104, line, 0);
     }
+    if (gExpand){
+        snprintf(line, sizeof line, "A(T) %.3F  H0 %.4F  COMOVING", aOfT((double)gTick/240.0), gH0);
+        emit(16, 122, line, 0);
+    }
+    if (gBubActive){
+        snprintf(line, sizeof line, "BUBBLES %d LIVE  %u SPAWNED  %u COLLAPSED",
+                 gBubLive, gBubSpawned, gBubCollapsed);
+        emit(16, 122, line, 0);
+    }
     // render panel (amber, right)
     int rx = gOW - 12*30 - 16;
     snprintf(line, sizeof line, "FPS %.0F  %.1F MS", gFps, gMs);
@@ -1307,6 +1645,9 @@ static void drawHud(const RP& rp){
     emit(rx, 50, line, 1);
     snprintf(line, sizeof line, "%s %s", gPaused ? "PAUSED" : "RUNNING", gVsync ? "VSYNC" : "");
     emit(rx, 68, line, 1);
+    snprintf(line, sizeof line, "%s  HIST %.1FS", gProj ? "PLANET" : "PERSP",
+             gHistOn ? gHistN*0.1 : 0.0);
+    emit(rx, 86, line, 1);
     int n = (int)gs.size(); if (!n) return;
     if (n > 512) n = 512;
     CUDA_CHECK(cudaMemcpyAsync(dGlyphs, gs.data(), n*sizeof(Glyph),
@@ -1336,6 +1677,194 @@ static double entropyNow(){
         }
     }
     return S;
+}
+
+// --- M7 cosmos: bubble host lifecycle ---
+static void bubAllocOnce(){
+    if (gBubAlloc) return;
+    CUDA_CHECK(cudaMalloc(&dBub, (size_t)NBUB*QB3*sizeof(cufftComplex)));
+    CUDA_CHECK(cudaMemset(dBub, 0, (size_t)NBUB*QB3*sizeof(cufftComplex)));
+    CUDA_CHECK(cudaMalloc(&dBubEdge, (size_t)QB3*sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&dBubOwner, NBUB*sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&dBubCtr, NBUB*sizeof(float4)));
+    CUDA_CHECK(cudaMemset(dBubCtr, 0, NBUB*sizeof(float4)));
+    CUDA_CHECK(cudaMalloc(&dBubRec, NBUB*sizeof(unsigned)));
+    CUDA_CHECK(cudaMemset(dBubRec, 0, NBUB*sizeof(unsigned)));
+    CUDA_CHECK(cudaMalloc(&dBubFlag, NBUB*sizeof(unsigned)));
+    CUDA_CHECK(cudaMemset(dBubFlag, 0, NBUB*sizeof(unsigned)));
+    CUDA_CHECK(cudaMalloc(&dBubPend, sizeof(unsigned)));
+    CUDA_CHECK(cudaMalloc(&dBubNew, NBUB*sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&dBubNewCount, sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&dBubNorm, sizeof(unsigned long long)));
+    CUDA_CHECK(cudaMalloc(&dIso, (size_t)gN));
+    int minus1[NBUB];
+    for (int s = 0; s < NBUB; s++){ minus1[s] = -1; hBubOwner[s] = -1; }
+    CUDA_CHECK(cudaMemcpy(dBubOwner, minus1, sizeof minus1, cudaMemcpyHostToDevice));
+    // cos^2 absorbing border, 8 cells per face (M6 idiom, 3D product)
+    std::vector<float> m((size_t)QB3);
+    auto s1 = [](int i){
+        const int B = 8;
+        float t = 1.0f;
+        if (i < B) t = sinf(PI_F*0.5f*(i + 0.5f)/B);
+        else if (i >= QB - B) t = sinf(PI_F*0.5f*(QB - 0.5f - i)/B);
+        return t*t;
+    };
+    for (int iz = 0; iz < QB; iz++)
+        for (int iy = 0; iy < QB; iy++)
+            for (int ix = 0; ix < QB; ix++)
+                m[((size_t)iz*QB + iy)*QB + ix] = s1(ix)*s1(iy)*s1(iz);
+    CUDA_CHECK(cudaMemcpy(dBubEdge, m.data(), m.size()*4, cudaMemcpyHostToDevice));
+    int dims[3] = {QB, QB, QB};
+    CUFFT_CHECK(cufftPlanMany(&planB, 3, dims, NULL, 1, QB3, NULL, 1, QB3,
+                              CUFFT_C2C, NBUB));
+    CUFFT_CHECK(cufftSetStream(planB, simS));
+    gBubAlloc = true;
+}
+// one split-step tick for all slots (V = 0 free evolution: single kinetic step is
+// exact; dead slots are zero grids). Runs on simS, per tick, when any bubble lives.
+static void bubEvolveTick(){
+    if (gBubLive == 0) return;
+    const int total = NBUB*QB3;
+    dim3 b(256), g((total + 255)/256);
+    const float coefK = 0.25f*DT;                     // hbar/(2m)*dt
+    CUFFT_CHECK(cufftExecC2C(planB, dBub, dBub, CUFFT_FORWARD));
+    kQ3PhaseK<<<g, b, 0, simS>>>(dBub, total, coefK);
+    CUFFT_CHECK(cufftExecC2C(planB, dBub, dBub, CUFFT_INVERSE));
+    kQ3Scale<<<g, b, 0, simS>>>(dBub, total, 1.0f/(float)QB3);
+    kQ3Edge<<<g, b, 0, simS>>>(dBub, total, dBubEdge);
+}
+// collapse by inscription: sample the 3D |psi|^2 CDF (host fp64, counter-keyed),
+// re-pointify the owner there, free the slot (cosmos contract)
+static void bubCollapse(int slot, int owner){
+    std::vector<cufftComplex> h((size_t)QB3);
+    CUDA_CHECK(cudaStreamSynchronize(simS));
+    CUDA_CHECK(cudaMemcpy(h.data(), dBub + (size_t)slot*QB3, (size_t)QB3*sizeof(cufftComplex),
+                          cudaMemcpyDeviceToHost));
+    std::vector<double> cdf((size_t)QB3);
+    double s = 0;
+    for (int c = 0; c < QB3; c++){
+        s += (double)h[c].x*h[c].x + (double)h[c].y*h[c].y;
+        cdf[c] = s;
+    }
+    double u = orrery::counter_uniform(gSeed ^ 0xB0BB1Eull, owner, gTick, 10) * s;
+    int lo = 0, hi = QB3 - 1;
+    while (lo < hi){ int mid = (lo + hi)/2; if (cdf[mid] < u) lo = mid + 1; else hi = mid; }
+    int ix = lo % QB, iy = (lo/QB) % QB, iz = lo/(QB*QB);
+    double u1 = orrery::counter_uniform(gSeed ^ 0xB0BB1Eull, owner, gTick, 11);
+    double u2 = orrery::counter_uniform(gSeed ^ 0xB0BB1Eull, owner, gTick, 12);
+    double u3 = orrery::counter_uniform(gSeed ^ 0xB0BB1Eull, owner, gTick, 13);
+    float4 ctr;
+    CUDA_CHECK(cudaMemcpy(&ctr, dBubCtr + slot, sizeof ctr, cudaMemcpyDeviceToHost));
+    float4 np = make_float4(
+        ctr.x + (float)(-QBL*0.5 + (ix + u1)*QBDX),
+        ctr.y + (float)(-QBL*0.5 + (iy + u2)*QBDX),
+        ctr.z + (float)(-QBL*0.5 + (iz + u3)*QBDX), ctr.w);
+    if      (np.x >=  256.0f) np.x -= 512.0f; else if (np.x < -256.0f) np.x += 512.0f;
+    if      (np.y >=  256.0f) np.y -= 512.0f; else if (np.y < -256.0f) np.y += 512.0f;
+    if      (np.z >=  256.0f) np.z -= 512.0f; else if (np.z < -256.0f) np.z += 512.0f;
+    CUDA_CHECK(cudaMemcpy(dPos[gPub] + owner, &np, sizeof np, cudaMemcpyHostToDevice));
+    float4 zero4 = make_float4(0, 0, 0, 0);
+    CUDA_CHECK(cudaMemcpy(dPosErr + owner, &zero4, sizeof zero4, cudaMemcpyHostToDevice));
+    unsigned reg = 0xC2u;                             // RECORDED|INSCRIBED latched + classical
+    CUDA_CHECK(cudaMemcpy(dRegime + owner, &reg, sizeof reg, cudaMemcpyHostToDevice));
+    unsigned zu = 0;
+    CUDA_CHECK(cudaMemcpy(dPartBub + owner, &zu, sizeof zu, cudaMemcpyHostToDevice));
+    int m1 = -1;
+    CUDA_CHECK(cudaMemcpy(dBubOwner + slot, &m1, sizeof m1, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemset(dBub + (size_t)slot*QB3, 0, (size_t)QB3*sizeof(cufftComplex)));
+    hBubOwner[slot] = -1;
+    gBubCollapsed++; gBubLive--;
+}
+// per-axis 2nd central moment of |psi|^2, averaged over axes (host fp64 observable)
+static double bubSigma(int slot){
+    std::vector<cufftComplex> h((size_t)QB3);
+    CUDA_CHECK(cudaStreamSynchronize(simS));
+    CUDA_CHECK(cudaMemcpy(h.data(), dBub + (size_t)slot*QB3, (size_t)QB3*sizeof(cufftComplex),
+                          cudaMemcpyDeviceToHost));
+    double n = 0, mx[3] = {0,0,0}, mxx[3] = {0,0,0};
+    for (int c = 0; c < QB3; c++){
+        double p = (double)h[c].x*h[c].x + (double)h[c].y*h[c].y;
+        double r[3] = { -QBL*0.5 + ((c % QB) + 0.5)*QBDX,
+                        -QBL*0.5 + (((c/QB) % QB) + 0.5)*QBDX,
+                        -QBL*0.5 + ((c/(QB*QB)) + 0.5)*QBDX };
+        n += p;
+        for (int a = 0; a < 3; a++){ mx[a] += p*r[a]; mxx[a] += p*r[a]*r[a]; }
+    }
+    double sig = 0;
+    for (int a = 0; a < 3; a++){
+        double m1 = mx[a]/n;
+        sig += sqrt(mxx[a]/n - m1*m1);
+    }
+    return sig/3.0;
+}
+// per-tick bubble hooks: evolve -> intrude -> records/collapse; spawn checks every 24
+static void bubTickHost(){
+    dim3 b(256), gP((gN + 255)/256);
+    bubEvolveTick();
+    if (gBubLive > 0){
+        kBubIntrude<<<gP, b, 0, simS>>>(dPos[gPub], dMom, dRegime, dPartBub, gN,
+                                        dBubOwner, dBubCtr, dBubFlag);
+        kBubTick<<<1, 1, 0, simS>>>(dBubOwner, dBubRec, dBubFlag, dBubPend);
+        unsigned pend = 0;
+        CUDA_CHECK(cudaStreamSynchronize(simS));
+        CUDA_CHECK(cudaMemcpy(&pend, dBubPend, sizeof pend, cudaMemcpyDeviceToHost));
+        for (int s = 0; s < NBUB; s++)
+            if (pend & (1u << s)) bubCollapse(s, hBubOwner[s]);
+    }
+    if ((gTick % 24) == 0 && gBubLive < NBUB){        // isolation check cadence
+        if (gSolver != SOLV_PM){                      // no PM force pass: deposit explicitly
+            int nc = PMN*PMN*PMN;
+            kZeroFix<<<(nc + 255)/256, b, 0, simS>>>(dFix, nc);
+            kDeposit<<<gP, b, 0, simS>>>(dPos[gPub], dMom, dRegime, gN, dFix);
+        }
+        kBubIso<<<gP, b, 0, simS>>>(dPos[gPub], dMom, dRegime, dPartBub, gN, dFix, dIso);
+        kBubSpawnScan<<<1, 1, 0, simS>>>(dIso, dPos[gPub], dRegime, dPartBub, gN,
+                                         dBubOwner, dBubCtr, dBubRec, dBubNew, dBubNewCount);
+        int nn = 0, slots[NBUB];
+        CUDA_CHECK(cudaStreamSynchronize(simS));
+        CUDA_CHECK(cudaMemcpy(&nn, dBubNewCount, sizeof nn, cudaMemcpyDeviceToHost));
+        if (nn > 0){
+            CUDA_CHECK(cudaMemcpy(slots, dBubNew, nn*sizeof(int), cudaMemcpyDeviceToHost));
+            int owners[NBUB];
+            CUDA_CHECK(cudaMemcpy(owners, dBubOwner, sizeof owners, cudaMemcpyDeviceToHost));
+            dim3 gB((QB3 + 255)/256);
+            for (int q = 0; q < nn; q++){
+                int slot = slots[q], owner = owners[slot];
+                hBubOwner[slot] = owner;
+                float4 pm;
+                CUDA_CHECK(cudaMemcpy(&pm, dMom + owner, sizeof pm, cudaMemcpyDeviceToHost));
+                // psi0: Gaussian sigma0 = 1 su with phase k = p/hbar = 2p (hbar = 0.5, m = 1)
+                kQ3Gauss<<<gB, b, 0, simS>>>(dBub + (size_t)slot*QB3,
+                                             2.0f*pm.x, 2.0f*pm.y, 2.0f*pm.z, 1.0f);
+                CUDA_CHECK(cudaMemsetAsync(dBubNorm, 0, 8, simS));
+                kQ3NormAcc<<<gB, b, 0, simS>>>(dBub + (size_t)slot*QB3, dBubNorm);
+                unsigned long long hn;
+                CUDA_CHECK(cudaStreamSynchronize(simS));
+                CUDA_CHECK(cudaMemcpy(&hn, dBubNorm, 8, cudaMemcpyDeviceToHost));
+                double nrm = orrery::fixed_decode((long long)hn)*(double)QBDX*QBDX*QBDX;
+                kQ3Scale<<<gB, b, 0, simS>>>(dBub + (size_t)slot*QB3, QB3,
+                                             (float)(1.0/sqrt(nrm)));
+                gBubSpawned++; gBubLive++;
+            }
+        }
+    }
+}
+
+// M7 cosmos: |rho_hat(k1)| growth observable (expand scenario). Measurement-only
+// deposit + forward FFT; it clobbers dReal/dSpec, so the caller must re-run
+// forcePass() afterwards to restore the dAcc/Phi invariant.
+static double expandAmp(){
+    int nc = PMN*PMN*PMN;
+    dim3 b(256);
+    kZeroFix<<<(nc + 255)/256, b, 0, simS>>>(dFix, nc);
+    kDeposit<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dMom, dRegime, gN, dFix);
+    kFixToReal<<<(nc + 255)/256, b, 0, simS>>>(dFix, dReal, nc);
+    CUFFT_CHECK(cufftExecR2C(planF, dReal, dSpec));
+    cufftComplex h;
+    CUDA_CHECK(cudaStreamSynchronize(simS));
+    CUDA_CHECK(cudaMemcpy(&h, dSpec + (size_t)(4*PMN + 0)*PMNZC + 0, sizeof h,
+                          cudaMemcpyDeviceToHost));
+    return sqrt((double)h.x*h.x + (double)h.y*h.y);
 }
 
 // --- M6 planck: host side of the psi engine ---
@@ -1648,8 +2177,9 @@ static void qRunShoq(){
     gPsiBytes.assign((const char*)h.data(), h.size()*sizeof(cufftComplex));
 }
 
-// invariant: dAcc = a(dPos[gPub]) after every full tick and after init
-static void forcePass(){
+// invariant: dAcc = a(dPos[gPub]) after every full tick and after init.
+// tState = sim time of the position state being differentiated (drives a(t) in expand).
+static void forcePass(double tState){
     dim3 b(256);
     if (gSolver == SOLV_NONE){
         if (!gBHActive) return;                       // pure drift (dAcc stays zero)
@@ -1664,7 +2194,7 @@ static void forcePass(){
         kDeposit<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dMom, dRegime, gN, dFix);
         kFixToReal<<<(nc + 255)/256, b, 0, simS>>>(dFix, dReal, nc);
         CUFFT_CHECK(cufftExecR2C(planF, dReal, dSpec));
-        kGreen<<<(ns + 255)/256, b, 0, simS>>>(dSpec);
+        kGreen<<<(ns + 255)/256, b, 0, simS>>>(dSpec, (float)(1.0/aOfT(tState)));
         CUFFT_CHECK(cufftExecC2R(planI, dSpec, dReal));   // dReal now holds Phi
         kForceGrid<<<(nc + 255)/256, b, 0, simS>>>(dReal, dFor);
         kGather<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dFor, dReal, dAcc, gN);
@@ -1689,10 +2219,15 @@ static void runTicks(int nt){
         for (int t = 0; t < nt; t++){
             kKick<<<g, b, 0, simS>>>(dMom, dAcc, dRegime, gN, hdt);
             int src = gPub, dst = 1 - gPub;
+            float ds = 1.0f;                          // expand: drift x_dot = p/a^2 at mid-step
+            if (gExpand){
+                double am = aOfT(((double)gTick + 0.5)*(1.0/240.0));
+                ds = (float)(1.0/(am*am));
+            }
             kDriftK<<<g, b, 0, simS>>>(dPos[src], dPos[dst], dPosErr, dMom, dTau,
-                                       dRegime, phiP, gN, DT, invc2);
+                                       dRegime, phiP, gN, DT, invc2, ds, dPartBub);
             gPub = dst;
-            forcePass();
+            forcePass(((double)gTick + 1.0)*(1.0/240.0));
             kKick<<<g, b, 0, simS>>>(dMom, dAcc, dRegime, gN, hdt);
             if (gBHActive){
                 kAbsorb<<<g, b, 0, simS>>>(dPos[gPub], dMom, dRegime, gN,
@@ -1710,11 +2245,18 @@ static void runTicks(int nt){
                 kDetectorStep<<<g, b, 0, simS>>>(dPos[gPub], dRegime, dRec, gN, gTick, gSeed);
             if (gScenario == SC_RATCHET)
                 kRatchetStep<<<(NRECS + 255)/256, b, 0, simS>>>(dRec, NRECS, gTick, gSeed);
+            if (gBubActive)
+                bubTickHost();                        // evolve -> inscribe/collapse -> spawn
             gTick++; gSimTime += DT;
+            if (gHistOn && (gTick % 24) == 0){        // light-history snapshot (0.1 s cadence)
+                gHistHead = (gHistHead + 1) % gHistDepth;
+                if (gHistN < gHistDepth) gHistN++;
+                kSnap<<<g, b, 0, simS>>>(dPos[gPub], dHistBuf + (size_t)gHistHead*gN, gN);
+            }
             if (gScenario == SC_ECHO && gTick == 6000){   // Loschmidt flip (declared)
                 kFlipMom<<<g, b, 0, simS>>>(dMom, gN);
                 CUDA_CHECK(cudaMemsetAsync(dPosErr, 0, (size_t)gN*sizeof(float4), simS));
-                forcePass();                              // re-establish dAcc invariant
+                forcePass((double)gTick*(1.0/240.0));     // re-establish dAcc invariant
             }
         }
     }
@@ -1837,6 +2379,8 @@ static void allocAll(){
     CUDA_CHECK(cudaMalloc(&dCntV, 32768*sizeof(unsigned)));
     CUDA_CHECK(cudaMalloc(&dRec,  (size_t)NRECS*sizeof(unsigned)));
     CUDA_CHECK(cudaMemset(dRec, 0, (size_t)NRECS*sizeof(unsigned)));
+    CUDA_CHECK(cudaMalloc(&dPartBub, (size_t)gN*sizeof(unsigned)));
+    CUDA_CHECK(cudaMemset(dPartBub, 0, (size_t)gN*sizeof(unsigned)));
     // M5 gargantua: BH state + lensed HDR
     CUDA_CHECK(cudaMalloc(&dBHpos, NBH_MAX*sizeof(float4)));
     CUDA_CHECK(cudaMalloc(&dBHmom, NBH_MAX*sizeof(float4)));
@@ -2053,11 +2597,81 @@ static void allocAll(){
         qRunShoq();
         gSolver = SOLV_NONE;
         break;
+    case SC_CIRCUMNAV: {                              // cosmos contract: light laps the universe
+        gN = 2; gMTot = 1.0;
+        double u05 = 10.0/sqrt(0.75);                 // u = v/sqrt(1-v^2/c^2) at v = c/2
+        float4 hp[2] = { make_float4(0,  2.0f, 0, 20000.0f),
+                         make_float4(0, -2.0f, 0,  8000.0f) };
+        float4 hm[2] = { make_float4(1.0f, 0, 0, 0.0f),          // photon: |p| = 1, m = 0
+                         make_float4((float)u05, 0, 0, 1.0f) };  // massive at 0.5c
+        float ht[2] = {0, 0}; unsigned hr[2] = {0x24u, 0x04u};
+        CUDA_CHECK(cudaMemcpy(dPos[0], hp, sizeof hp, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dMom, hm, sizeof hm, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dTau, ht, sizeof ht, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dRegime, hr, sizeof hr, cudaMemcpyHostToDevice));
+        gSolver = SOLV_NONE;
+    } break;
+    case SC_EXPAND: {                                 // cosmos contract: EdS comoving cosmology
+        gN = 1000000; gMTot = 1e6;                    // 100^3 Zel'dovich lattice (forced in main)
+        gExpand = true;
+        gH0 = sqrt(8.0*3.14159265358979323846*(double)G_DIAL
+                   * ((double)gN/(512.0*512.0*512.0)) / 3.0);
+        const float k1 = 2.0f*PI_F*4.0f/512.0f;       // mode (4,0,0): 32 PM cells per wavelength
+        const float Ad = 0.02f/k1;                    // delta_0 = Ad*k1 = 0.02
+        kInitZeldovich<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime,
+                                                Ad, k1, (float)gH0);
+        gSolver = SOLV_PM;
+    } break;
+    case SC_BUBBLES: {                                // cosmos contract: roaming 3D bubbles
+        gN = 8 + 4*512; gMTot = (double)gN;
+        std::vector<float4> hp(gN), hm(gN);
+        std::vector<float> ht(gN, 0.0f);
+        std::vector<unsigned> hr(gN, 0x02u);
+        for (int q = 0; q < 8; q++){                  // loners: isolated ring, p = 0.2 tangential
+            double ph = 2.0*3.14159265358979*q/8.0;
+            hp[q] = make_float4((float)(150.0*cos(ph)), (float)(150.0*sin(ph)), 0, 12000.0f);
+            hm[q] = make_float4((float)(-0.2*sin(ph)), (float)(0.2*cos(ph)), 0, 1.0f);
+        }
+        for (int c = 0; c < 4; c++){                  // rigid intruder clusters aimed at loners 0-3
+            double ph = 2.0*3.14159265358979*c/8.0;
+            float ccx = (float)(210.0*cos(ph)), ccy = (float)(210.0*sin(ph));
+            float cvx = (float)(-6.0*cos(ph)), cvy = (float)(-6.0*sin(ph));
+            for (int j = 0; j < 512; j++){
+                int i = 8 + c*512 + j;
+                using namespace orrery;
+                float gx = (float)counter_gauss(gSeed, i, 0, 9);
+                float gy = (float)counter_gauss(gSeed, i, 1, 9);
+                float gz = (float)counter_gauss(gSeed, i, 2, 9);
+                float il = 1.0f/sqrtf(gx*gx + gy*gy + gz*gz + 1e-12f);
+                float r = 4.0f*cbrtf((float)counter_uniform(gSeed, i, 3, 9));
+                hp[i] = make_float4(ccx + r*gx*il, ccy + r*gy*il, r*gz*il, 4500.0f);
+                hm[i] = make_float4(cvx, cvy, 0, 1.0f);
+            }
+        }
+        CUDA_CHECK(cudaMemcpy(dPos[0], hp.data(), (size_t)gN*16, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dMom, hm.data(), (size_t)gN*16, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dTau, ht.data(), (size_t)gN*4, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dRegime, hr.data(), (size_t)gN*4, cudaMemcpyHostToDevice));
+        gSolver = SOLV_NONE;
+    } break;
+    }
+    if (gScenario == SC_BUBBLES || gBubWant) gBubActive = true;
+    if (gBubActive) bubAllocOnce();
+    if (gWantHist){                                   // light-history ring (visuals only):
+        size_t freeB = 0, totB = 0;                   // adaptive depth, <= 40% of free VRAM
+        cudaMemGetInfo(&freeB, &totB);
+        size_t per = (size_t)gN*sizeof(ushort4);
+        int depth = (int)((double)freeB*0.4/(double)per);
+        if (depth > 384) depth = 384;
+        if (depth >= 48){
+            CUDA_CHECK(cudaMalloc(&dHistBuf, (size_t)depth*per));
+            gHistDepth = depth; gHistOn = true;
+        }
     }
     CUDA_CHECK(cudaMemcpy(dPos[1], dPos[0], (size_t)gN*sizeof(float4),
                           cudaMemcpyDeviceToDevice));
     CUDA_CHECK(cudaDeviceSynchronize());
-    forcePass();                                      // establish dAcc = a(x0); Phi for meters
+    forcePass((double)gTick*(1.0/240.0));             // establish dAcc = a(x0); Phi for meters
     CUDA_CHECK(cudaStreamSynchronize(simS));
     gM0 = metersNow();
 }
@@ -2097,6 +2711,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp){
         else if (k == 'C') gMode ^= 1;
         else if (k == 'T') gTonemap ^= 1;
         else if (k == 'B') gBloomOn ^= 1;
+        else if (k == 'L') gProj ^= 1;                // little planet <-> perspective
         else if (k == 'A') gAutoExp ^= 1;
         else if (k == 'O') gAutoOrbit ^= 1;
         else if (k == 'P') gPaused ^= 1;
@@ -2179,6 +2794,8 @@ int main(int argc, char** argv){
         else if (a == "--ssaa")                 gSS = 2;
         else if (a == "--phys")                 gMode = 1;
         else if (a == "--aces")                 gTonemap = 1;
+        else if (a == "--bubbles")              gBubWant = true;   // live-universe bubbles (declared)
+        else if (a == "--planet")               gProj = 1;         // little-planet projection
         else if (a == "--bench" && i+1 < argc)  benchFrames = atoi(argv[++i]);
         else if (a == "--shot" && i+1 < argc)   shotPath = argv[++i];
         else if (a == "--frames" && i+1 < argc) shotFrames = atoi(argv[++i]);
@@ -2205,6 +2822,9 @@ int main(int argc, char** argv){
             else if (s == "doubleslit") gScenario = SC_DOUBLESLIT;
             else if (s == "tunneling")  gScenario = SC_TUNNELING;
             else if (s == "shoq")       gScenario = SC_SHOQ;
+            else if (s == "circumnav")  gScenario = SC_CIRCUMNAV;
+            else if (s == "expand")     gScenario = SC_EXPAND;
+            else if (s == "bubbles")    gScenario = SC_BUBBLES;
             else { fprintf(stderr, "error: unknown scenario\n"); return 2; }
         }
         else { fprintf(stderr, "usage: tinyuniverse [--scenario galaxy|kepler|threebody|cloud] "
@@ -2214,7 +2834,9 @@ int main(int argc, char** argv){
     }
     gOW &= ~1; gOH &= ~1;
     if (gN < 1000) gN = 1000;
+    if (gScenario == SC_EXPAND) gN = 1000000;         // lattice is exactly 100^3 (contract)
     if (goldenMode) gSeed = 20260711ull;              // frozen seed at init time
+    if (jsonMode || goldenMode) gWantHist = false;    // history is render-only, never declared
 
     CUDA_CHECK(cudaSetDevice(0));
     cudaDeviceProp prop;
@@ -2229,28 +2851,47 @@ int main(int argc, char** argv){
 
     if (jsonMode || goldenMode){                      // headless instrument face (newton contract)
         if (goldenMode){                              // frozen golden params (seed forced pre-init)
-            const long long GS[17] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
-                                      320000, 24000, 3000, 12000, 6000, 4000, 0, 0, 0};
+            const long long GS[20] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
+                                      320000, 24000, 3000, 12000, 6000, 4000, 0, 0, 0,
+                                      12288, 24000, 4800};
             runSteps = GS[gScenario];
         }
         if (runSteps <= 0){
-            const long long GS[17] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
-                                      320000, 24000, 3000, 12000, 6000, 4000, 0, 0, 0};
+            const long long GS[20] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
+                                      320000, 24000, 3000, 12000, 6000, 4000, 0, 0, 0,
+                                      12288, 24000, 4800};
             runSteps = GS[gScenario];
         }
         long long done = 0, nextPct = 10;
         const int batch = (gSolver == SOLV_TINY)
-                        ? ((gScenario == SC_KEPREL) ? 1000 : 20000) : 250;
+                        ? ((gScenario == SC_KEPREL) ? 1000 : 20000)
+                        : ((gScenario == SC_BUBBLES) ? 240 : 250);
         const bool wantS = (gScenario == SC_MERGER || gScenario == SC_ECHO);
         double S0 = 0, Smid = 0, Sprev = 0;
         int monoUp = 0, monoTot = 0;
         double prcPrev = 0, prcTot = 0, prcCum = 0; bool prcInit = false;
         std::vector<double> angs;
+        std::vector<double> amps, avals;              // expand: growth checkpoints
         if (wantS){ S0 = entropyNow(); Sprev = S0; }
+        if (gScenario == SC_EXPAND){
+            amps.push_back(expandAmp()); avals.push_back(1.0);
+            forcePass(0.0);                           // restore Phi/dAcc after measurement
+        }
         while (done < runSteps){
             int nt = (int)((runSteps - done) < batch ? (runSteps - done) : batch);
             runTicks(nt);
             done += nt;
+            if (gScenario == SC_EXPAND && done % 2000 == 0){
+                amps.push_back(expandAmp()); avals.push_back(aOfT((double)done/240.0));
+                forcePass((double)done/240.0);
+            }
+            if (gScenario == SC_BUBBLES && done == 1440){
+                // sigma probe: slot 0 (lowest owner id), untouched until first intrusion
+                // at ~tick 1920; bubbles spawned at check tick 0 have evolved done-1 steps
+                double tEv = (double)(done - 1)/240.0;
+                gBubSig = bubSigma(0);
+                gBubSigExp = sqrt(1.0 + 0.0625*tEv*tEv);   // sigma0 sqrt(1+(hbar t/2m sigma0^2)^2)
+            }
             if (gScenario == SC_KEPREL){              // LRL angle, batch-sampled + unwrapped
                 float4 sp2[2], sm2[2];
                 CUDA_CHECK(cudaStreamSynchronize(simS));
@@ -2313,6 +2954,25 @@ int main(int argc, char** argv){
             bytes.append((const char*)lg, sizeof lg);
         }
         if (!gPsiBytes.empty()) bytes.append(gPsiBytes);   // psi joins the declared state (planck)
+        int hOwn[NBUB] = {}; unsigned hRecs[NBUB] = {};
+        if (gBubActive){                              // bubble block joins the declared state (cosmos)
+            float4 hCtrs[NBUB];
+            CUDA_CHECK(cudaMemcpy(hOwn, dBubOwner, sizeof hOwn, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(hRecs, dBubRec, sizeof hRecs, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(hCtrs, dBubCtr, sizeof hCtrs, cudaMemcpyDeviceToHost));
+            unsigned bs[3] = {gBubSpawned, gBubCollapsed, (unsigned)gBubLive};
+            bytes.append((const char*)bs, sizeof bs);
+            bytes.append((const char*)hOwn, sizeof hOwn);
+            bytes.append((const char*)hRecs, sizeof hRecs);
+            bytes.append((const char*)hCtrs, sizeof hCtrs);
+            std::vector<cufftComplex> hg((size_t)QB3);
+            for (int s = 0; s < NBUB; s++){           // surviving psi grids, slot order
+                if (hOwn[s] < 0) continue;
+                CUDA_CHECK(cudaMemcpy(hg.data(), dBub + (size_t)s*QB3,
+                                      (size_t)QB3*sizeof(cufftComplex), cudaMemcpyDeviceToHost));
+                bytes.append((const char*)hg.data(), (size_t)QB3*sizeof(cufftComplex));
+            }
+        }
         std::string shash = orrery::blake2b_hex(bytes, 32);
 
         double pnorm = sqrt(2.0*gMTot*(gM0.KE > 1e-12 ? gM0.KE : fabs(gM0.E) + 1e-12));
@@ -2533,6 +3193,57 @@ int main(int argc, char** argv){
             pass = (de < 0.02) && (dp < 1e-3);
             gates = "\"de_lt_2e-2\":" + B(de < 0.02) + ",\"dp_lt_1e-3\":" + B(dp < 1e-3);
             break;
+        case SC_CIRCUMNAV: {
+            float4 hp2[2]; float ht2[2];
+            CUDA_CHECK(cudaMemcpy(hp2, dPos[gPub], sizeof hp2, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(ht2, dTau, sizeof ht2, cudaMemcpyDeviceToHost));
+            double dph = sqrt((double)hp2[0].x*hp2[0].x + ((double)hp2[0].y - 2.0)*((double)hp2[0].y - 2.0)
+                            + (double)hp2[0].z*hp2[0].z);
+            double dma = sqrt((double)hp2[1].x*hp2[1].x + ((double)hp2[1].y + 2.0)*((double)hp2[1].y + 2.0)
+                            + (double)hp2[1].z*hp2[1].z);
+            double tExp = ((double)runSteps/240.0)*sqrt(0.75);
+            double tRel = fabs((double)ht2[1]/tExp - 1.0);
+            bool g1 = dph < 0.02, g2 = dma < 0.02;
+            bool g3 = (ht2[0] == 0.0f), g4 = tRel < 2e-3;
+            pass = g1 && g2 && g3 && g4;
+            gates = "\"photon_return_lt_0.02\":" + B(g1) + ",\"massive_return_lt_0.02\":" + B(g2)
+                  + ",\"photon_tau_zero\":" + B(g3) + ",\"tau_sr_lt_2e-3\":" + B(g4);
+            resExtra = ",\"photon_return\":" + fmt6(dph) + ",\"massive_return\":" + fmt6(dma)
+                     + ",\"tau_massive\":" + fmt6((double)ht2[1]) + ",\"tau_exp\":" + fmt6(tExp)
+                     + ",\"tau_rel_err\":" + fmt6(tRel);
+        } break;
+        case SC_EXPAND: {
+            // linear growth: ln A vs ln a LS slope must be ~1 (D proportional to a, EdS)
+            size_t na = amps.size();
+            double sx = 0, sy = 0, sxx = 0, sxy = 0;
+            for (size_t q = 0; q < na; q++){
+                double lx = log(avals[q]), ly = log(amps[q]);
+                sx += lx; sy += ly; sxx += lx*lx; sxy += lx*ly;
+            }
+            double slope = (na*sxy - sx*sy)/(na*sxx - sx*sx);
+            double ratRel = fabs((amps.back()/amps.front())/(avals.back()/avals.front()) - 1.0);
+            bool g1 = (slope > 0.92 && slope < 1.08), g2 = ratRel < 0.08, g3 = dp < 1e-3;
+            pass = g1 && g2 && g3;
+            gates = "\"growth_slope_1pm0.08\":" + B(g1) + ",\"growth_ratio_lt_8pc\":" + B(g2)
+                  + ",\"dp_lt_1e-3\":" + B(g3);
+            resExtra = ",\"a_end\":" + fmt6(avals.back()) + ",\"growth_slope\":" + fmt6(slope)
+                     + ",\"growth_ratio_rel\":" + fmt6(ratRel) + ",\"h0\":" + fmt6(gH0)
+                     + ",\"amp0\":" + fmt6(amps.front()) + ",\"amp_end\":" + fmt6(amps.back());
+        } break;
+        case SC_BUBBLES: {
+            double srel = (gBubSigExp > 0) ? fabs(gBubSig/gBubSigExp - 1.0) : 1.0;
+            bool g1 = (gBubSpawned == 8), g2 = srel < 0.02;
+            bool g3 = (gBubCollapsed == 4), g4 = (gBubLive == 4);
+            pass = g1 && g2 && g3 && g4;
+            gates = "\"spawned_8\":" + B(g1) + ",\"sigma_lt_2pc\":" + B(g2)
+                  + ",\"collapsed_4\":" + B(g3) + ",\"alive_4\":" + B(g4);
+            resExtra = ",\"n_spawned\":" + fmti((long long)gBubSpawned)
+                     + ",\"n_collapsed\":" + fmti((long long)gBubCollapsed)
+                     + ",\"n_alive\":" + fmti((long long)gBubLive)
+                     + ",\"sigma_meas\":" + fmt6(gBubSig) + ",\"sigma_exp\":" + fmt6(gBubSigExp)
+                     + ",\"sigma_rel\":" + fmt6(srel);
+        } break;
+        default: break;
         }
         const char* solvName = gSolver == SOLV_PM ? "pm" : (gSolver == SOLV_TINY ? "tiny"
                              : (gSolver == SOLV_NONE ? "none" : "direct"));
@@ -2548,8 +3259,8 @@ int main(int argc, char** argv){
             + ",\"n_rel\":" + fmti((long long)M1.nRel) + ",\"n_classical\":" + fmti((long long)M1.nCls) + resExtra + "}"
             + ",\"gates\":{" + gates + "}"
             + ",\"verdict\":\"" + (pass ? "pass" : "fail") + "\"";
-        std::string env = full_envelope("tinyuniverse", "0.2.0", body,
-                                        "newton scenario run; visuals non-declared");
+        std::string env = full_envelope("tinyuniverse", "0.5.0", body,
+                                        "scenario run; visuals non-declared");
         if (goldenMode)
             return golden_check(SC_NAME[gScenario], declared_object(body), env);
         printf("%s\n", env.c_str());

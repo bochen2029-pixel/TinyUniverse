@@ -30,6 +30,9 @@ GOLDENS = [
     ("doubleslit",[r"build\tinyuniverse.exe", "--scenario", "doubleslit","--golden"]),
     ("tunneling", [r"build\tinyuniverse.exe", "--scenario", "tunneling", "--golden"]),
     ("shoq",      [r"build\tinyuniverse.exe", "--scenario", "shoq",      "--golden"]),
+    ("circumnav", [r"build\tinyuniverse.exe", "--scenario", "circumnav", "--golden"]),
+    ("expand",    [r"build\tinyuniverse.exe", "--scenario", "expand",    "--golden"]),
+    ("bubbles",   [r"build\tinyuniverse.exe", "--scenario", "bubbles",   "--golden"]),
 ]
 
 def gpu_preflight(min_free_mb=2000):
