@@ -1,0 +1,128 @@
+{
+  "name": "n0_crown_choice_strict",
+  "_doc": "Parsimony audit: how does N0 acquire a strong-gravity self-gravitating-bound-state receipt as its crown? PATCHWORK = keep chasing precise Choptuik gamma on the CPU (the incumbent's deferred crown), which the graveyard (D-021) proves needs a NEW mechanism beyond the shipped EKG solver. UNIFIED = reframe the crown to a boson-star M(omega) ground-state receipt, DERIVED from mechanisms N0 already owns (the constrained polar-areal metric solver + a 1D shooting root-find). Targets are the epistemic goods a foundation-stone GR oracle must deliver. cost: posit=bridge=1.0, import=0.2, derived=0.0.",
+  "targets": [
+    "strong_gravity_selfgravitating_bound_state",
+    "analytic_NR_anchor_matched_under_1pct",
+    "deterministic_single_file_cpu_under_5min",
+    "generalizes_to_N1_N4_star_stage"
+  ],
+  "patchwork": {
+    "name": "PATCHWORK (chase precise gamma on CPU)",
+    "items": [
+      {
+        "id": "amr_refinement_engine",
+        "kind": "posit",
+        "layer": "physics",
+        "covers": [],
+        "_doc": "a NEW mechanism not in the shipped tool: Berger-Oliger recursive refinement (or an equivalent self-similar-coordinate re-derivation). D-021 proved the shipped uniform grid CANNOT see gamma; something new must be added."
+      },
+      {
+        "id": "deterministic_amr_claim",
+        "kind": "bridge",
+        "layer": "physics",
+        "covers": [
+          "deterministic_single_file_cpu_under_5min"
+        ],
+        "_doc": "UNBACKED: that recursive-refinement subcycling + a floating refinement criterion can be made byte-deterministic, single-file, and golden-freezable inside doctrine. Not yet demonstrated for AMR here (autotune found ratchet's rho_c blind, but that is a level-crossing, not an AMR solver)."
+      },
+      {
+        "id": "amr_resolves_gamma_in_budget",
+        "kind": "bridge",
+        "layer": "physics",
+        "covers": [
+          "analytic_NR_anchor_matched_under_1pct"
+        ],
+        "_doc": "UNBACKED: that AMR-on-CPU lands |gamma-0.374|<tol at R^2>0.99 within ~5 min. Choptuik 1993 needed AMR AND was not a 5-minute CPU job; the graveyard corpse (p* wandered 0.40->0.356) is the measured counter-evidence."
+      },
+      {
+        "id": "gamma_is_the_deep_receipt",
+        "kind": "posit",
+        "layer": "physics",
+        "covers": [
+          "strong_gravity_selfgravitating_bound_state"
+        ],
+        "_doc": "the assumption that criticality (an unstable, non-bound, self-similar attractor) is the RIGHT deep-GR receipt for a foundation-stone oracle. It is deep, but it is not a bound state and not self-gravitating equilibrium -- a different physical target than N1-N4 need."
+      }
+    ]
+  },
+  "unified": {
+    "name": "UNIFIED (reframe: boson-star M(omega) receipt)",
+    "items": [
+      {
+        "id": "constrained_metric_solver",
+        "kind": "import",
+        "layer": "physics",
+        "covers": [],
+        "_doc": "ALREADY OWNED by substrate_nexus v1.0.0: outward integration of (ln a)',(ln alpha)' from the Hamiltonian/slicing constraints in polar-areal gauge. Adopted as-is; not a new assumption."
+      },
+      {
+        "id": "shooting_rootfind",
+        "kind": "import",
+        "layer": "physics",
+        "covers": [],
+        "_doc": "ALREADY OWNED as a pattern: the incumbent already brackets/bisects p* (bisect_pstar). A 1D shooting root-find on the central amplitude for the nodeless ground state is the same machinery; autotune's crossing-locate demonstrates it as an ORRERY primitive."
+      },
+      {
+        "id": "complex_scalar_ansatz",
+        "kind": "posit",
+        "layer": "physics",
+        "covers": [],
+        "_doc": "the ONE genuinely new assumption: a stationary complex scalar phi=sigma(r)e^{-i omega t} whose stress-energy is time-independent (Kaup 1968; Ruffini-Bonazzola 1969). This is the sole new brute posit the reframe spends."
+      },
+      {
+        "id": "bosonstar_bound_state_derived",
+        "kind": "derived",
+        "layer": "physics",
+        "covers": [
+          "strong_gravity_selfgravitating_bound_state"
+        ],
+        "via": [
+          "constrained_metric_solver",
+          "complex_scalar_ansatz"
+        ],
+        "_doc": "the self-gravitating ground state follows from the constraint solver + the stationary ansatz: an eigenvalue problem for omega given central sigma(0). No new assumption."
+      },
+      {
+        "id": "MofOmega_curve_derived",
+        "kind": "derived",
+        "layer": "physics",
+        "covers": [
+          "analytic_NR_anchor_matched_under_1pct"
+        ],
+        "via": [
+          "shooting_rootfind",
+          "bosonstar_bound_state_derived"
+        ],
+        "_doc": "sweeping sigma(0) and shooting for the nodeless omega traces the ADM-mass curve M(omega); its maximum M_max ~ 0.633 M_Pl^2/m (Kaup/RB) is a KNOWN constant -- the anchor, matched to <1% on a UNIFORM grid (equilibria are smooth, no self-similar blow-up)."
+      },
+      {
+        "id": "determinism_derived",
+        "kind": "derived",
+        "layer": "physics",
+        "covers": [
+          "deterministic_single_file_cpu_under_5min"
+        ],
+        "via": [
+          "constrained_metric_solver",
+          "shooting_rootfind"
+        ],
+        "_doc": "a static ODE shoot on a fixed grid is trivially deterministic and fast (no time evolution near a chaotic critical point); (params)->byte-identical, seconds not minutes."
+      },
+      {
+        "id": "generalizes_derived",
+        "kind": "derived",
+        "layer": "physics",
+        "covers": [
+          "generalizes_to_N1_N4_star_stage"
+        ],
+        "via": [
+          "complex_scalar_ansatz",
+          "bosonstar_bound_state_derived"
+        ],
+        "_doc": "a scalar-field equilibrium IS the S1/S3/N4 'hydrogen ball that pressure supports' object -- the boson star is the ground-state the star stage relaxes toward; the receipt is on the N1-N4 critical path, unlike an unstable critical attractor."
+      }
+    ]
+  },
+  "_variant": "strict: patchwork does NOT claim N1-N4 generalization -> same_reach=false -> parsimony reject (exit 1). The honest reading: chasing-gamma cannot even reach the generalization target."
+}

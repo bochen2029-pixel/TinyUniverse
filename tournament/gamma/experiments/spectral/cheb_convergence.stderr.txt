@@ -1,0 +1,32 @@
+
+=== Chebyshev vs FD2 convergence (spectral advocate, gamma fork) ===
+
+A) SMOOTH sharp Gaussian (width 0.160) -- near-critical-but-analytic pulse:
+      N   cheb maxerr    fd2 maxerr
+      8     2.512e+00     2.999e-01
+     16     1.118e+00     1.652e+00
+     24     2.064e-01     9.909e-01
+     32     1.726e-02     5.371e-01
+     48     1.591e-05     2.684e-01
+     64     1.644e-09     1.507e-01
+     96     6.661e-15     6.847e-02
+    128     7.994e-15     3.842e-02
+   -> cheb semilog slope (log10 err / N) = -0.1667  (steep neg == EXPONENTIAL)
+   -> fd2  loglog order                  = -1.977  (~ -2 == O(N^-2))
+   -> to match cheb N=64 err (1.64e-09), FD needs ~622233 points (9722x the DOF)
+
+B) MOVING CUSP |x-s|^1.5 (C^1, not C^2) -- the singular caricature (spectral FLANK):
+      N   cheb maxerr    fd2 maxerr
+      8     1.917e-01     1.857e-01
+     16     8.823e-02     1.247e-01
+     24     9.410e-02     1.018e-01
+     32     8.970e-02     9.283e-02
+     48     6.515e-02     7.580e-02
+     64     6.641e-02     6.237e-02
+     96     4.861e-02     5.092e-02
+    128     3.388e-02     4.642e-02
+   -> cheb loglog order = -0.682  (ALGEBRAIC, not exponential -> Gibbs/needs adaptive map)
+
+verdict: {"spectral_exponential_on_smooth": true, "fd_algebraic_order_near_-2": true, "spectral_flank_confirmed_algebraic_on_cusp": true}
+declared_blake2b = b6ad2eba341d427ffa8c825058cb6a383c4500660fabbf3f576b9920d63dcaaf
+
