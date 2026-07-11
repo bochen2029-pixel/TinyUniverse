@@ -50,9 +50,15 @@
 #define CELL     4.0f
 #define BOXL     512.0f
 #define REL_V2   1.0f            // (0.05c)^2 = 1 su^2/s^2 — regime threshold
-enum Scenario { SC_GALAXY = 0, SC_KEPLER, SC_THREEBODY, SC_CLOUD };
-enum Solver   { SOLV_PM = 0, SOLV_DIRECT, SOLV_TINY };
-static const char* SC_NAME[4] = {"galaxy", "kepler", "threebody", "cloud"};
+enum Scenario { SC_GALAXY = 0, SC_KEPLER, SC_THREEBODY, SC_CLOUD,
+                SC_MERGER, SC_ECHO, SC_RATCHET, SC_DETECTOR };
+enum Solver   { SOLV_PM = 0, SOLV_DIRECT, SOLV_TINY, SOLV_NONE };
+static const char* SC_NAME[8] = {"galaxy", "kepler", "threebody", "cloud",
+                                 "merger", "echo", "ratchet", "detector"};
+// arrow contract: ratchet constants (N6/ORRERY), record thresholds
+#define RATCHET_PDOWN 0.4166666666666667   // p/(p+(1-p)rho), p=0.3 rho=0.6
+#define REC_THRESH 16u
+#define NRECS 3000000
 
 #define CUDA_CHECK(call) do {                                                  \
     cudaError_t _e = (call);                                                   \
@@ -233,7 +239,8 @@ __global__ void kDriftK(const float4* pin, float4* pout, float4* perr,
     pout[i] = p; perr[i] = e;
     float v2 = (m.x*m.x + m.y*m.y + m.z*m.z)*im*im;
     tau[i] += dt * (1.0f - v2*inv2c2);
-    regime[i] = (v2 > REL_V2) ? 0x04u : 0x02u;
+    // speed class recomputed; record latches (0x40 RECORDED, 0x80 inscribed) preserved
+    regime[i] = (regime[i] & 0xC0u) | ((v2 > REL_V2) ? 0x04u : 0x02u);
 }
 
 // --- PM pipeline: fixed-point CIC deposit -> cuFFT -> Green -> force grid -> gather ---
@@ -406,15 +413,107 @@ __global__ void kMeters(const float4* pos, const float4* mom, const float* phi,
     atomicAdd(&a8[(m.x*m.x + m.y*m.y + m.z*m.z)*im*im > REL_V2 ? 6 : 7], 1ull);
 }
 
+// --- M3 arrow: entropy histograms, momentum flip, scenarios, ratchet engine ---
+__global__ void kCount(const float4* pos, const float4* mom, int N,
+                       unsigned* cx, unsigned* cv){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    float4 p = pos[i], m = mom[i];
+    float im = 1.0f/m.w;
+    int xi = min(max((int)((p.x + 256.0f)/16.0f), 0), 31);
+    int yi = min(max((int)((p.y + 256.0f)/16.0f), 0), 31);
+    int zi = min(max((int)((p.z + 256.0f)/16.0f), 0), 31);
+    atomicAdd(&cx[(xi*32 + yi)*32 + zi], 1u);
+    int vx = min(max((int)((m.x*im + 8.0f)/0.5f), 0), 31);
+    int vy = min(max((int)((m.y*im + 8.0f)/0.5f), 0), 31);
+    int vz = min(max((int)((m.z*im + 8.0f)/0.5f), 0), 31);
+    atomicAdd(&cv[(vx*32 + vy)*32 + vz], 1u);
+}
+__global__ void kFlipMom(float4* mom, int N){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    float4 m = mom[i];
+    mom[i] = make_float4(-m.x, -m.y, -m.z, m.w);
+}
+__global__ void kInitMerger(float4* pos, float4* mom, float* tau, unsigned* regime,
+                            int N, unsigned long long seed){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    using namespace orrery;
+    int half = N/2;
+    int a = (i < half);
+    float gx = (float)counter_gauss(seed, i, 0, 3);
+    float gy = (float)counter_gauss(seed, i, 1, 3);
+    float gz = (float)counter_gauss(seed, i, 2, 3);
+    float il = rsqrtf(gx*gx + gy*gy + gz*gz + 1e-12f);
+    float r = 60.0f * cbrtf((float)counter_uniform(seed, i, 3, 3));
+    float cxr = a ? -80.0f : 80.0f, cz = a ? -10.0f : 10.0f, vx0 = a ? 1.5f : -1.5f;
+    pos[i] = make_float4(cxr + r*gx*il, r*gy*il, cz + r*gz*il, a ? 4500.0f : 9500.0f);
+    float sigv = 0.35f*sqrtf(G_DIAL*(float)(N/2)/60.0f);
+    mom[i] = make_float4(vx0 + sigv*(float)counter_gauss(seed, i, 4, 3),
+                         sigv*(float)counter_gauss(seed, i, 5, 3),
+                         sigv*(float)counter_gauss(seed, i, 6, 3), 1.0f);
+    tau[i] = 0.0f; regime[i] = 0x02u;
+}
+__global__ void kInitStream(float4* pos, float4* mom, float* tau, unsigned* regime,
+                            int N, unsigned long long seed){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    using namespace orrery;
+    float x = -12.0f - 20.0f*(float)counter_uniform(seed, i, 0, 4);
+    float y = 20.0f*(float)counter_gauss(seed, i, 1, 4);
+    float z = 20.0f*(float)counter_gauss(seed, i, 2, 4);
+    pos[i] = make_float4(x, y, z, 5200.0f);
+    mom[i] = make_float4(2.0f, 0, 0, 1.0f);
+    tau[i] = 0.0f; regime[i] = 0x02u;
+}
+__global__ void kRatchetInitRecs(unsigned* rec, int nr){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= nr) return;
+    rec[i] = (i < nr/3) ? 1u : (i < 2*(nr/3) ? 4u : 16u);
+}
+// one walk event per unresolved record per tick; absorb at 0 or R0+30
+__global__ void kRatchetStep(unsigned* rec, int nr, unsigned long long tick,
+                             unsigned long long seed){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= nr) return;
+    unsigned n = rec[i];
+    unsigned R0 = (i < nr/3) ? 1u : (i < 2*(nr/3) ? 4u : 16u);
+    unsigned cap = R0 + 30u;
+    if (n == 0u || n >= cap) return;
+    double u = orrery::counter_uniform(seed ^ 0xA77CE7ull, i, tick, 5);
+    rec[i] = n + ((u < RATCHET_PDOWN) ? -1 : +1);
+}
+// detector slab x in [0,8]: writes +1/tick in-slab (cap 64); ratchet walk outside;
+// bit 0x80 = ever-inscribed, bit 0x40 = RECORDED (n >= 16)
+__global__ void kDetectorStep(const float4* pos, unsigned* regime, unsigned* rec,
+                              int N, unsigned long long tick, unsigned long long seed){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    float x = pos[i].x;
+    unsigned n = rec[i];
+    bool in = (x >= 0.0f && x <= 8.0f);
+    if (in){
+        n = (n < 64u) ? n + 1u : 64u;
+        regime[i] |= 0x80u;
+    } else if (n > 0u && n < 64u){
+        double u = orrery::counter_uniform(seed ^ 0xDE7EC7ull, i, tick, 6);
+        n += (u < RATCHET_PDOWN) ? -1 : +1;
+    }
+    rec[i] = n;
+    if (n >= REC_THRESH) regime[i] |= 0x40u;
+}
+
 __global__ void kClear(float4* hdr, int n){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i < n) hdr[i] = make_float4(0, 0, 0, 0);
 }
 
-__global__ void kSplat(const float4* pos, int N, float4* hdr, RP rp){
+__global__ void kSplat(const float4* pos, const unsigned* reg, int N, float4* hdr, RP rp){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
     float4 p = pos[i];
+    if (reg && (reg[i] & 0x40u)) p.w = fmaxf(p.w, 13000.0f);   // RECORDED: blue-white tint
     float rx = p.x - rp.cpos[0], ry = p.y - rp.cpos[1], rz = p.z - rp.cpos[2];
     float cz = rx*rp.fwd[0] + ry*rp.fwd[1] + rz*rp.fwd[2];
     if (cz < 1.0f) return;
@@ -638,6 +737,8 @@ static unsigned long long *dFix = 0, *dMet = 0;
 static float  *dReal = 0;
 static cufftComplex *dSpec = 0;
 static cufftHandle planF, planI;
+static unsigned *dCntX = 0, *dCntV = 0, *dRec = 0;    // M3: entropy histograms + records
+static double gS = 0, gdS = 0;                        // HUD entropy readouts
 static double gMTot = 1e6;
 struct Met { double KE, PE, E, Px, Py, Pz, Lz; unsigned long long nRel, nCls; };
 static Met  gM0 = {};                                  // meters at t=0
@@ -662,7 +763,8 @@ static void springStep(Spring& s, float dt){
     s.cur += s.vel*dt;
 }
 static void applyPreset(int i){
-    const float D0[4] = {380.0f, 650.0f, 9.0f, 420.0f};   // per-scenario base distance
+    const float D0[8] = {380.0f, 650.0f, 9.0f, 420.0f,
+                         420.0f, 420.0f, 300.0f, 120.0f}; // per-scenario base distance
     float d = D0[gScenario];
     if (i == 0){ cAz.tgt = 35;  cEl.tgt = 24; cDist.tgt = logf(d); }
     if (i == 1){ cAz.tgt = 120; cEl.tgt = 10; cDist.tgt = logf(0.45f*d); }
@@ -694,7 +796,7 @@ static void renderFrame(RP& rp){
     int RW = rp.RW, RH = rp.RH, npx = RW*RH;
     dim3 b1(256), g1((npx + 255)/256);
     kClear<<<g1, b1, 0, prsS>>>(dHdr, npx);
-    kSplat<<<(gN + 255)/256, b1, 0, prsS>>>(dPos[gPub], gN, dHdr, rp);
+    kSplat<<<(gN + 255)/256, b1, 0, prsS>>>(dPos[gPub], dRegime, gN, dHdr, rp);
     // auto-exposure histogram
     CUDA_CHECK(cudaMemsetAsync(dHist, 0, 256*sizeof(unsigned), prsS));
     kHist<<<g1, b1, 0, prsS>>>(dHdr, npx, dHist);
@@ -754,10 +856,16 @@ static void drawHud(const RP& rp){
     emit(16, 50, line, 0);
     if (gMode) emit(16, 68, "PHYSICAL: L=T4 SAT=1.0 NO CLIP", 0);
     else       emit(16, 68, "CINEMATIC: L=T2.2 SAT=1.2 STRETCH", 0);
-    static const char* SC_HUD[4] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD"};
+    static const char* SC_HUD[8] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD",
+                                    "MERGER", "ECHO", "RATCHET", "DETECTOR"};
     snprintf(line, sizeof line, "%s %s  DE %+.1E  DP %.1E", SC_HUD[gScenario],
-             gSolver == SOLV_PM ? "PM" : (gSolver == SOLV_TINY ? "TINY" : "DIRECT"), gDE, gDP);
+             gSolver == SOLV_PM ? "PM" : (gSolver == SOLV_TINY ? "TINY" :
+             (gSolver == SOLV_NONE ? "NONE" : "DIRECT")), gDE, gDP);
     emit(16, 86, line, 0);
+    if (gScenario == SC_MERGER || gScenario == SC_ECHO){
+        snprintf(line, sizeof line, "S %.3F  DS/DT %+.1E", gS, gdS);
+        emit(16, 104, line, 0);
+    }
     // render panel (amber, right)
     int rx = gOW - 12*30 - 16;
     snprintf(line, sizeof line, "FPS %.0F  %.1F MS", gFps, gMs);
@@ -779,8 +887,30 @@ static void drawHud(const RP& rp){
 // ----------------------------------------------------------------------------
 // Sim ticks (simStream, ping-pong publish)
 // ----------------------------------------------------------------------------
+// coarse-grained entropy S = S_x + S_v (arrow contract: declared machinery)
+static double entropyNow(){
+    CUDA_CHECK(cudaMemsetAsync(dCntX, 0, 32768*sizeof(unsigned), simS));
+    CUDA_CHECK(cudaMemsetAsync(dCntV, 0, 32768*sizeof(unsigned), simS));
+    kCount<<<(gN + 255)/256, 256, 0, simS>>>(dPos[gPub], dMom, gN, dCntX, dCntV);
+    static std::vector<unsigned> hx(32768), hv(32768);
+    CUDA_CHECK(cudaStreamSynchronize(simS));
+    CUDA_CHECK(cudaMemcpy(hx.data(), dCntX, 32768*4, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(hv.data(), dCntV, 32768*4, cudaMemcpyDeviceToHost));
+    double S = 0;
+    for (int pass = 0; pass < 2; pass++){
+        const std::vector<unsigned>& h = pass ? hv : hx;
+        for (int i = 0; i < 32768; i++){
+            if (!h[i]) continue;
+            double q = (double)h[i]/(double)gN;
+            S -= q*log(q);
+        }
+    }
+    return S;
+}
+
 // invariant: dAcc = a(dPos[gPub]) after every full tick and after init
 static void forcePass(){
+    if (gSolver == SOLV_NONE) return;                 // pure drift (dAcc stays zero)
     dim3 b(256);
     if (gSolver == SOLV_PM){
         int nc = PMN*PMN*PMN, ns = PMN*PMN*PMNZC;
@@ -814,7 +944,16 @@ static void runTicks(int nt){
             gPub = dst;
             forcePass();
             kKick<<<g, b, 0, simS>>>(dMom, dAcc, gN, hdt);
+            if (gScenario == SC_DETECTOR)
+                kDetectorStep<<<g, b, 0, simS>>>(dPos[gPub], dRegime, dRec, gN, gTick, gSeed);
+            if (gScenario == SC_RATCHET)
+                kRatchetStep<<<(NRECS + 255)/256, b, 0, simS>>>(dRec, NRECS, gTick, gSeed);
             gTick++; gSimTime += DT;
+            if (gScenario == SC_ECHO && gTick == 6000){   // Loschmidt flip (declared)
+                kFlipMom<<<g, b, 0, simS>>>(dMom, gN);
+                CUDA_CHECK(cudaMemsetAsync(dPosErr, 0, (size_t)gN*sizeof(float4), simS));
+                forcePass();                              // re-establish dAcc invariant
+            }
         }
     }
     CUDA_CHECK(cudaEventRecord(tickDone, simS));
@@ -923,6 +1062,10 @@ static void allocAll(){
     CUDA_CHECK(cudaMalloc(&dSpec, (size_t)PMN*PMN*PMNZC*sizeof(cufftComplex)));
     CUDA_CHECK(cudaMalloc(&dFor,  (size_t)PMN*PMN*PMN*sizeof(float4)));
     CUDA_CHECK(cudaMalloc(&dMet,  8*sizeof(unsigned long long)));
+    CUDA_CHECK(cudaMalloc(&dCntX, 32768*sizeof(unsigned)));
+    CUDA_CHECK(cudaMalloc(&dCntV, 32768*sizeof(unsigned)));
+    CUDA_CHECK(cudaMalloc(&dRec,  (size_t)NRECS*sizeof(unsigned)));
+    CUDA_CHECK(cudaMemset(dRec, 0, (size_t)NRECS*sizeof(unsigned)));
     CUFFT_CHECK(cufftPlan3d(&planF, PMN, PMN, PMN, CUFFT_R2C));
     CUFFT_CHECK(cufftPlan3d(&planI, PMN, PMN, PMN, CUFFT_C2R));
     CUFFT_CHECK(cufftSetStream(planF, simS));
@@ -971,6 +1114,23 @@ static void allocAll(){
         CUDA_CHECK(cudaMemcpy(dRegime, hr, sizeof hr, cudaMemcpyHostToDevice));
         gSolver = SOLV_TINY;
     } break;
+    case SC_MERGER:
+    case SC_ECHO:
+        gMTot = (double)gN * 1.0;
+        kInitMerger<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed);
+        gSolver = SOLV_PM;
+        break;
+    case SC_RATCHET:
+        gN = 1000; gMTot = 1000.0;
+        kInitCloud<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed);
+        kRatchetInitRecs<<<(NRECS + 255)/256, 256>>>(dRec, NRECS);
+        gSolver = SOLV_NONE;
+        break;
+    case SC_DETECTOR:
+        gN = 200000; gMTot = 200000.0;
+        kInitStream<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed);
+        gSolver = SOLV_NONE;
+        break;
     }
     CUDA_CHECK(cudaMemcpy(dPos[1], dPos[0], (size_t)gN*sizeof(float4),
                           cudaMemcpyDeviceToDevice));
@@ -1110,6 +1270,10 @@ int main(int argc, char** argv){
             else if (s == "kepler")    gScenario = SC_KEPLER;
             else if (s == "threebody") gScenario = SC_THREEBODY;
             else if (s == "cloud")     gScenario = SC_CLOUD;
+            else if (s == "merger")    gScenario = SC_MERGER;
+            else if (s == "echo")      gScenario = SC_ECHO;
+            else if (s == "ratchet")   gScenario = SC_RATCHET;
+            else if (s == "detector")  gScenario = SC_DETECTOR;
             else { fprintf(stderr, "error: unknown scenario\n"); return 2; }
         }
         else { fprintf(stderr, "usage: tinyuniverse [--scenario galaxy|kepler|threebody|cloud] "
@@ -1134,24 +1298,36 @@ int main(int argc, char** argv){
 
     if (jsonMode || goldenMode){                      // headless instrument face (newton contract)
         if (goldenMode){                              // frozen golden params (seed forced pre-init)
-            const long long GS[4] = {10000, 1000000, 1000000, 12000};
+            const long long GS[8] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000};
             runSteps = GS[gScenario];
         }
         if (runSteps <= 0){
-            const long long GS[4] = {10000, 1000000, 1000000, 12000};
+            const long long GS[8] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000};
             runSteps = GS[gScenario];
         }
         long long done = 0, nextPct = 10;
         const int batch = (gSolver == SOLV_TINY) ? 20000 : 250;
+        const bool wantS = (gScenario == SC_MERGER || gScenario == SC_ECHO);
+        double S0 = 0, Smid = 0, Sprev = 0;
+        int monoUp = 0, monoTot = 0;
+        if (wantS){ S0 = entropyNow(); Sprev = S0; }
         while (done < runSteps){
             int nt = (int)((runSteps - done) < batch ? (runSteps - done) : batch);
             runTicks(nt);
             done += nt;
+            if (wantS){
+                double S = entropyNow();
+                if (S >= Sprev - 0.01) monoUp++;      // fluctuation-scale tolerance (D-015)
+                monoTot++;
+                if (gScenario == SC_ECHO && done == 6000) Smid = S;
+                Sprev = S;
+            }
             if (done*100 >= runSteps*nextPct){
                 CUDA_CHECK(cudaStreamSynchronize(simS));
                 fprintf(stderr, "  %lld%%\r", nextPct); nextPct += 10;
             }
         }
+        double Send = Sprev;
         CUDA_CHECK(cudaStreamSynchronize(simS));
         Met M1 = metersNow();
 
@@ -1181,10 +1357,64 @@ int main(int argc, char** argv){
             }
         }
         bool pass = false;
-        std::string gates;
+        std::string gates, resExtra;
         using namespace orrery;
         auto B = [](bool b){ return std::string(b ? "true" : "false"); };
         switch (gScenario){
+        case SC_MERGER: {
+            double rise = Send - S0, mf = monoTot ? (double)monoUp/monoTot : 0;
+            pass = (rise > 0.3) && (mf >= 0.75) && (de < 0.08);
+            gates = "\"ds_gt_0.3\":" + B(rise > 0.3) + ",\"mono_ge_0.75\":" + B(mf >= 0.75)
+                  + ",\"de_lt_8e-2\":" + B(de < 0.08);
+            resExtra = ",\"s0\":" + fmt6(S0) + ",\"s_end\":" + fmt6(Send)
+                     + ",\"mono_frac\":" + fmt6(mf);
+        } break;
+        case SC_ECHO: {
+            double rise = Smid - S0, ret = Send - S0;
+            pass = (rise > 0.25) && (ret < 0.35*rise);
+            gates = "\"rise_gt_0.25\":" + B(rise > 0.25)
+                  + ",\"echo_return_lt_0.35rise\":" + B(ret < 0.35*rise);
+            resExtra = ",\"s0\":" + fmt6(S0) + ",\"s_mid\":" + fmt6(Smid)
+                     + ",\"s_end\":" + fmt6(Send);
+        } break;
+        case SC_RATCHET: {
+            std::vector<unsigned> hr(NRECS);
+            CUDA_CHECK(cudaMemcpy(hr.data(), dRec, (size_t)NRECS*4, cudaMemcpyDeviceToHost));
+            long long unw[3] = {0, 0, 0};
+            const int cls = NRECS/3;
+            for (int q = 0; q < NRECS; q++)
+                if (hr[q] == 0u) unw[q/cls]++;         // unresolved counts as survived (declared)
+            const double lam = 0.3/(0.7*0.6);
+            double fr[3], ex[3], rel[3];
+            bool ok = true;
+            const double tol[3] = {0.01, 0.01, 0.05};
+            const int Rv[3] = {1, 4, 16};
+            for (int q = 0; q < 3; q++){
+                fr[q] = (double)unw[q]/cls;
+                ex[q] = pow(lam < 1.0 ? lam : 1.0, Rv[q]);
+                rel[q] = fabs(fr[q]/ex[q] - 1.0);
+                ok &= (rel[q] < tol[q]);
+            }
+            pass = ok;
+            gates = "\"r1_lt_1pc\":" + B(rel[0] < 0.01) + ",\"r4_lt_1pc\":" + B(rel[1] < 0.01)
+                  + ",\"r16_lt_5pc\":" + B(rel[2] < 0.05);
+            resExtra = ",\"unwrite_r1\":" + fmt6(fr[0]) + ",\"unwrite_r4\":" + fmt6(fr[1])
+                     + ",\"unwrite_r16\":" + fmt6(fr[2]);
+        } break;
+        case SC_DETECTOR: {
+            std::vector<unsigned> hg(gN);
+            CUDA_CHECK(cudaMemcpy(hg.data(), dRegime, (size_t)gN*4, cudaMemcpyDeviceToHost));
+            long long crossed = 0, recorded = 0;
+            for (int q = 0; q < gN; q++){
+                if (hg[q] & 0x80u) crossed++;
+                if (hg[q] & 0x40u) recorded++;
+            }
+            double frac = crossed ? (double)recorded/crossed : 0;
+            pass = (frac > 0.95) && (crossed > 50000);
+            gates = "\"rec_frac_gt_0.95\":" + B(frac > 0.95)
+                  + ",\"crossed_gt_5e4\":" + B(crossed > 50000);
+            resExtra = ",\"n_crossed\":" + fmti(crossed) + ",\"n_recorded\":" + fmti(recorded);
+        } break;
         case SC_KEPLER:
             pass = (de < 2e-3) && (dl < 2e-3);
             gates = "\"de_lt_2e-3\":" + B(de < 2e-3) + ",\"dl_lt_2e-3\":" + B(dl < 2e-3);
@@ -1203,7 +1433,8 @@ int main(int argc, char** argv){
             gates = "\"de_lt_2e-2\":" + B(de < 0.02) + ",\"dp_lt_1e-3\":" + B(dp < 1e-3);
             break;
         }
-        const char* solvName = gSolver == SOLV_PM ? "pm" : (gSolver == SOLV_TINY ? "tiny" : "direct");
+        const char* solvName = gSolver == SOLV_PM ? "pm" : (gSolver == SOLV_TINY ? "tiny"
+                             : (gSolver == SOLV_NONE ? "none" : "direct"));
         std::string body =
               std::string("\"seed\":") + fmti((long long)gSeed)
             + ",\"params\":{\"scenario\":\"" + SC_NAME[gScenario] + "\",\"n\":" + fmti(gN)
@@ -1213,7 +1444,7 @@ int main(int argc, char** argv){
             + ",\"result\":{\"state_b2b\":\"" + shash + "\""
             + ",\"e0\":" + fmt6(gM0.E) + ",\"e1\":" + fmt6(M1.E)
             + ",\"de_rel\":" + fmt6(de) + ",\"p_drift\":" + fmt6(dp) + ",\"l_drift\":" + fmt6(dl)
-            + ",\"n_rel\":" + fmti((long long)M1.nRel) + ",\"n_classical\":" + fmti((long long)M1.nCls) + "}"
+            + ",\"n_rel\":" + fmti((long long)M1.nRel) + ",\"n_classical\":" + fmti((long long)M1.nCls) + resExtra + "}"
             + ",\"gates\":{" + gates + "}"
             + ",\"verdict\":\"" + (pass ? "pass" : "fail") + "\"";
         std::string env = full_envelope("tinyuniverse", "0.2.0", body,
@@ -1294,6 +1525,11 @@ int main(int argc, char** argv){
             double pn = sqrt(2.0*gMTot*(gM0.KE > 1e-12 ? gM0.KE : 1.0));
             gDP = sqrt((m.Px-gM0.Px)*(m.Px-gM0.Px) + (m.Py-gM0.Py)*(m.Py-gM0.Py)
                      + (m.Pz-gM0.Pz)*(m.Pz-gM0.Pz))/pn;
+            if (gScenario == SC_MERGER || gScenario == SC_ECHO){
+                double Sn = entropyNow();
+                if (gS > 0) gdS = (Sn - gS)/2.0;      // ~2 s cadence
+                gS = Sn;
+            }
         }
         rp.mode = gMode; rp.tonemap = gTonemap; rp.bloomOn = gBloomOn; rp.frame = gFrame++;
         buildCamera(rp);

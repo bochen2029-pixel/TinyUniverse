@@ -28,10 +28,15 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(deferred → M3)* P³M short-range correction (PM cell softening is the declared v1 resolution); spatial hash (arrives with short-range forces); harness/verify.py
 - **Gate: MET** — 1M gravitating @1080p: **347 fps avg / 159 min**; 10⁶-tick drift evidence in goldens (kepler/threebody run 10⁶ ticks as their golden params).
 
-## M3 · `arrow` — thermodynamics + inscription
-- ☐ T/P/S meters (dS/dτ display only); mixing scenarios show the arrow emerge
-- ☐ Ratchet mechanic: record events into environment DOF, per-bubble redundancy R, collapse past `(1−p)ρ = p` (mapping contract; params anchored to ORRERY receipts)
-- **Gate:** nexus N6 parity in-sim at small config; the double-slit detector visibly *writes records* before collapse.
+## M3 · `arrow` — thermodynamics + inscription ☑ **CLOSED 2026-07-11**
+- ☑ Entropy meter (32³ position + velocity histograms, integer-atomic counts, host fp64 S; HUD shows S and ΔS)
+- ☑ `merger` golden `34a2db77`: S rises 0.90 nat through violent relaxation, mono 0.77 ≥ 0.75 (D-015)
+- ☑ `echo` golden `2f02d94f`: **Loschmidt reversal exact to 6 decimals** — S returns 14.084043 → 14.570027 → 14.084043
+- ☑ `ratchet` golden `ccf4a3f8`: in-sim engine vs closed form at 1.5e-5/0.23%/0.33% (R=1/4/16) — nexus N6 parity in production
+- ☑ `detector` golden `a0c31f74`: 200k/200k transiting particles inscribed + RECORDED (0x40/0x80 latches live; recorded particles render blue-tinted)
+- ☑ `harness/verify.py`: **9/9 GREEN in 55 s** (carried chore closed)
+- ☐ *(deferred again, declared)* P³M/spatial hash — arrives with close-encounter physics (M4/M5)
+- **Gate: MET** — the arrow emerges from reversible microdynamics, reverses on cue, and records ratchet exactly as the theory's closed form demands.
 
 ## M4 · `einstein` — the relativistic layer
 - ☐ Rapidity-form p = γmv integrator; per-particle τ driving all animation; photons at c

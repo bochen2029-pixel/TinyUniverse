@@ -1,27 +1,28 @@
 # RUN_STATE.md
 
-**As of:** 2026-07-11 · **Milestone:** M3 `arrow` · **State:** M2 CLOSED — the universe gravitates. 1M particles with live PM gravity: **347 fps avg / 159 min** @1080p. Four scenario goldens frozen and reproduced (`GOLDEN OK` ×4): kepler `448847ec` · threebody `f67abce4` · cloud `975389db` · galaxy `ff17431a`.
+**As of:** 2026-07-11 · **Milestone:** M4 `einstein` · **State:** M3 CLOSED — the arrow of time is a frozen golden. **9/9 goldens GREEN in 55 s via `harness/verify.py`.**
 
-## What M2 established
+## What M3 established
 
-- **Deterministic self-gravity**: 128³ PM (fixed-point CIC deposit per Invariant 4 → cuFFT Poisson → FD force grid), KDK + Kahan drift, fp64 tiny solver for precision-reference scenarios (D-014). Periodic box = the 3-torus, natively — M7's topology already lives in the gravity solver.
-- **Physics receipts**: kepler energy drift < 1e-6 over 10⁶ ticks (fp32-boundary/fp64-internal); the figure-8 three-body choreography bounded over 29.5 periods; cloud relaxes at 0.46% drift; galaxy 1.9% @10⁴ ticks with momentum conserved to 2e-6. Regime masks live: the galaxy disk runs 97.5% REL (v ~ 0.16c — the compressed dials at work, M4's opening argument).
-- **The envelope face is real**: `--scenario X --json|--golden` emits liborrery `full_envelope` and uses `golden_check` — the app's headless face is now contract-grade (D-003 fulfilled end-to-end).
-- Evidence: `runs/newton_galaxy_25s.png` (differentially sheared arms — dynamics, not decoration), `runs/newton_cloud_collapse.png`, `contracts/newton.contract.md`.
+- **Entropy meters** (coarse 32³ x/v histograms, integer-atomic, declared machinery) with the ledger rule: gates on ΔS, never absolute level.
+- **The arrow, three ways**: `merger` (S rises 0.90 nat through violent relaxation, golden `34a2db77`); `echo` (Loschmidt: momentum flip at tick 6000 retraces the rise EXACTLY — S 14.084043 → 14.570027 → 14.084043, golden `2f02d94f`); `ratchet` (in-sim inscription engine matches the Mirror/N6 closed form to 0.33% worst-class, golden `ccf4a3f8`).
+- **The detector writes records**: transit → deterministic inscription → redundancy walk → RECORDED latch (regime 0x40, blue-tinted in render). Golden `a0c31f74`. This is M6's double-slit collapse mechanic, live and gated, waiting for ψ.
+- D-015: merger mono gate corrected (real transient compressions, not jitter); SOLV_NONE; latch semantics.
 
-## Current task — M3 `arrow` (thermodynamics + inscription)
+## Current task — M4 `einstein` (the relativistic layer)
 
-1. Contract first: T/P/S meters (dS/dτ display only — the Mirror's ledger rule); mixing scenarios that make the arrow of time visible.
-2. **The Ratchet mechanic**: record events into environment DOF, per-bubble redundancy R, collapse past `(1−p)ρ = p` — mapping contract anchored to ORRERY `ratchet` receipts (nexus N6 verified the closed form in-repo).
-3. Short-range forces (spatial hash + P³M correction) if the collision/thermal physics needs them — deferred from M2.
-4. harness/verify.py (carried from M0/M2 — overdue; nexus + 4 scenario goldens make it worth automating now).
+Contract first (`contracts/einstein.contract.md`), then:
+1. Rapidity-form p = γmv integration (the galaxy already runs at 0.16c — 97.5% REL — Newtonian p=mv is now the *approximation being retired*); τ gains the potential term via Φ_PM: dτ = dt(1 − v²/2c² + Φ/c²).
+2. Photons (massless particles at c); 1PN correction from the Φ grid (nexus N3 parity gate); Kepler-at-t_emit observation for the renderer.
+3. 2.5PN drag scenario (binary inspiral) if budget allows — else M5 with the BHs.
+4. Oracle gates: nexus N3/N7/N8/N9 parities at declared fp32 tolerances.
 
-**M3 gate:** entropy meter shows dS/dτ ≥ 0 emerge from reversible microdynamics in a mixing scenario; the Ratchet in-sim matches nexus N6 at a small config; a detector scenario visibly writes records before collapse (prep for M6's double slit).
+**M4 gate:** relativistic kepler scenario (compactness ≈ 5e-3) precesses at the nexus N3 rate within tolerance; a clock-pair scenario shows τ desync across a potential well; photons hold |v|=c through the PM field; goldens frozen, harness green.
 
 ## Chores carried
 
-P1 Vulkan presentation (SDK) · ImGui at P1 · TAA · clang/g++ nexus parity · art pass (dust lanes; galaxy de margin — D-014 note) · cufft64 dll in dist packaging (D-014) · harness/verify.py.
+P1 Vulkan (SDK) · ImGui · TAA · clang/g++ nexus parity · art pass · cufft64 dll packaging · P³M/spatial hash (close encounters).
 
 ## Standing context
 
-Oracle: tiny_nexus v1.0.0 (`ad64f810`). Dials v0 + frame contract v1.0.0 frozen. Build now links `core\lib\envelope.cpp` + `cufft.lib` (BUILD.md golden path needs this update — do at M3 contract commit). Repo docs authoritative over agent memories.
+Oracle: tiny_nexus `ad64f810`. 9 goldens: nexus + kepler `448847ec` · threebody `f67abce4` · cloud `975389db` · galaxy `ff17431a` · merger `34a2db77` · echo `2f02d94f` · ratchet `ccf4a3f8` · detector `a0c31f74`. Contracts: nexus v1.0.0, frame v1.0.0, newton v1.0.0, arrow v1.0.0. Build: nvcc + envelope.cpp + cufft.lib (BUILD.md app line still needs updating — fold into M4 commit). Repo docs authoritative over agent memories.
