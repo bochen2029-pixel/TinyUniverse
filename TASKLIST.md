@@ -20,11 +20,13 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(carried)* clang++/g++ parity build of nexus
 - **Gate: MET** — 1M particles 1080p: **499 fps avg / 226 min** (SSAA 2×: 178/152); CINEMATIC §7 **10/10** (evidence: `app/MODULE.md`, `runs/firstlight_*.png`).
 
-## M2 · `newton` — the classical tier *(current)*
-- ☐ Spatial hash; leapfrog KDK; PM gravity (cuFFT Poisson) + P³M near-field
-- ☐ Conservation gates (energy/momentum/L drift bounds, deterministic reductions)
-- ☐ Scenarios: `kepler` (two-body vs nexus N2), `cloud-collapse`, `three-body`
-- **Gate:** 1M gravitating particles 60 Hz; drift within declared bounds over 10⁶ ticks; goldens frozen.
+## M2 · `newton` — the classical tier ☑ **CLOSED 2026-07-11**
+- ☑ PM gravity: 128³ CIC (fixed-point uint64 deposit — Invariant 4) → cuFFT Poisson → FD force grid → gather; periodic box = the torus, natively
+- ☑ KDK leapfrog + Kahan drift; tiny solver (N≤32) fp64-internal (D-014); direct solver ≤4096
+- ☑ Conservation meters via `fixed_atomic_add` (device) / fp64 (tiny); HUD drift readouts
+- ☑ Scenario contracts + envelope face (liborrery `full_envelope`/`golden_check`): kepler · threebody · cloud · galaxy — **all gates green, goldens frozen + GOLDEN OK on re-run** (kepler de<1e-6 @10⁶ ticks; figure-8 bounded 29.5 periods; cloud 0.46%; galaxy 1.9%, p_drift 2e-6)
+- ☐ *(deferred → M3)* P³M short-range correction (PM cell softening is the declared v1 resolution); spatial hash (arrives with short-range forces); harness/verify.py
+- **Gate: MET** — 1M gravitating @1080p: **347 fps avg / 159 min**; 10⁶-tick drift evidence in goldens (kepler/threebody run 10⁶ ticks as their golden params).
 
 ## M3 · `arrow` — thermodynamics + inscription
 - ☐ T/P/S meters (dS/dτ display only); mixing scenarios show the arrow emerge

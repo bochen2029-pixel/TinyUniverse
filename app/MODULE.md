@@ -1,3 +1,17 @@
+# MODULE — app (tinyuniverse v0.2.0 "newton")
+
+## M2 addendum (2026-07-11)
+
+v0.2.0 adds self-gravity per `contracts/newton.contract.md`: PM 128³ (fixed-point CIC → cuFFT → FD force grid), KDK + Kahan drift, fp64 tiny solver (D-014), conservation meters, four scenarios with frozen goldens (kepler `448847ec` · threebody `f67abce4` · cloud `975389db` · galaxy `ff17431a`, all `GOLDEN OK` on re-run). Headless face is envelope-conformant: `--scenario X [--steps S] [--seed N] --json | --golden`; `--warm T` pre-evolves before `--shot`. Gate: **347 fps avg / 159 min** @1M/1080p with live gravity. Build now needs `core\lib\envelope.cpp` + `cufft.lib`:
+
+```
+nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\tinyuniverse.exe app\tinyuniverse.cu core\lib\envelope.cpp user32.lib gdi32.lib opengl32.lib cufft.lib
+```
+
+(Runtime dependency: cufft64 dll from the toolkit redist — D-014.) Everything below documents v0.1.0 first light and remains true.
+
+---
+
 # MODULE — app (tinyuniverse v0.1.0 "first light")
 
 **Purpose:** M1 canvas — the windowed client over the frame contract, and the CINEMATIC stack's reference implementation. 1M inert drifting particles (galaxy scenario), rendered entirely in CUDA; presentation is a thin GL blit (D-012 P0).

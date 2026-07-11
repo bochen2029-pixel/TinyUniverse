@@ -36,9 +36,23 @@
 #include <cmath>
 #include <vector>
 #include <string>
+#include <cufft.h>
 #include "../core/lib/rng.cuh"
+#include "../core/lib/reduce.cuh"
+#include "../core/lib/envelope.h"
 
 #define PI_F 3.14159265358979f
+
+// --- M2 newton: dials + PM constants (contracts/newton.contract.md) ---
+#define G_DIAL   2.0e-3f
+#define PMN      128
+#define PMNZC    (PMN/2 + 1)
+#define CELL     4.0f
+#define BOXL     512.0f
+#define REL_V2   1.0f            // (0.05c)^2 = 1 su^2/s^2 — regime threshold
+enum Scenario { SC_GALAXY = 0, SC_KEPLER, SC_THREEBODY, SC_CLOUD };
+enum Solver   { SOLV_PM = 0, SOLV_DIRECT, SOLV_TINY };
+static const char* SC_NAME[4] = {"galaxy", "kepler", "threebody", "cloud"};
 
 #define CUDA_CHECK(call) do {                                                  \
     cudaError_t _e = (call);                                                   \
@@ -111,8 +125,21 @@ __device__ void agx(float& r, float& g, float& b){
 // ----------------------------------------------------------------------------
 // Kernels: init, tick, splat, histogram, bloom, composite, HUD
 // ----------------------------------------------------------------------------
+// analytic enclosed-mass fraction of the galaxy profile (disk 68% / bulge 12% / halo 20%)
+__device__ float encMassFrac(float r){
+    float fd = 0.0f;
+    if (r > 14.0f){ float x = (r - 14.0f)/45.0f; fd = 1.0f - (1.0f + x)*expf(-x); }
+    float t = r*0.1f;
+    float fb = erff(t*0.70710678f) - 0.7978845f*t*expf(-0.5f*t*t);
+    float fh = (r <= 40.0f) ? 0.0f : fminf(logf(r/40.0f)/1.7917595f, 1.0f);
+    return 0.68f*fd + 0.12f*fb + 0.20f*fh;
+}
+__device__ __forceinline__ float vcirc(float r, float Mtot){
+    return sqrtf(G_DIAL*Mtot*encMassFrac(r)/fmaxf(r, 2.0f));
+}
+
 __global__ void kInit(float4* pos, float4* mom, float* tau, unsigned* regime,
-                      int N, unsigned long long seed){
+                      int N, unsigned long long seed, float Mtot){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
     using namespace orrery;
@@ -127,10 +154,10 @@ __global__ void kInit(float4* pos, float4* mom, float* tau, unsigned* regime,
                  + 0.22f*(float)counter_gauss(seed, i, 3, 0);
         float zz = (float)counter_gauss(seed, i, 4, 0) * (3.5f*expf(-r/70.0f) + 0.5f);
         x = r*cosf(th); y = r*sinf(th); z = zz;
-        float vrot = 1.2f * r / (r + 15.0f);
-        vx = -vrot*sinf(th) + 0.02f*(float)counter_gauss(seed, i, 5, 0);
-        vy =  vrot*cosf(th) + 0.02f*(float)counter_gauss(seed, i, 6, 0);
-        vz =  0.015f*(float)counter_gauss(seed, i, 7, 0);
+        float vc = vcirc(r, Mtot);
+        vx = -vc*sinf(th) + 0.08f*vc*(float)counter_gauss(seed, i, 5, 0);
+        vy =  vc*cosf(th) + 0.08f*vc*(float)counter_gauss(seed, i, 6, 0);
+        vz =  0.05f*vc*(float)counter_gauss(seed, i, 7, 0);
         double ut = counter_uniform(seed, i, 8, 0);
         if (ut < 0.07) T = 9500.0f + 5500.0f*(float)counter_uniform(seed, i, 9, 0);  // blue giants
         else           T = 3300.0f + 3200.0f*(float)(ut*ut);
@@ -138,20 +165,23 @@ __global__ void kInit(float4* pos, float4* mom, float* tau, unsigned* regime,
         x = 10.0f*(float)counter_gauss(seed, i, 10, 0);
         y = 10.0f*(float)counter_gauss(seed, i, 11, 0);
         z = 7.0f*(float)counter_gauss(seed, i, 12, 0);
-        float rr = sqrtf(x*x + y*y) + 8.0f;
-        float vrot = 0.9f * rr / (rr + 15.0f);
-        float ir = 1.0f / rr;
-        vx = -vrot*y*ir; vy = vrot*x*ir; vz = 0.03f*(float)counter_gauss(seed, i, 13, 0);
+        float rr = sqrtf(x*x + y*y + z*z) + 2.0f;
+        float vc = vcirc(rr, Mtot);
+        float ir = 1.0f / (sqrtf(x*x + y*y) + 2.0f);
+        vx = -0.6f*vc*y*ir + 0.35f*vc*(float)counter_gauss(seed, i, 22, 0);
+        vy =  0.6f*vc*x*ir + 0.35f*vc*(float)counter_gauss(seed, i, 13, 0);
+        vz =  0.35f*vc*(float)counter_gauss(seed, i, 23, 0);
         T = 3100.0f + 2100.0f*(float)counter_uniform(seed, i, 14, 0);
     } else {                                          // halo (log-uniform shell)
-        float r = 40.0f * powf(260.0f/40.0f, (float)counter_uniform(seed, i, 15, 0));
+        float r = 40.0f * powf(240.0f/40.0f, (float)counter_uniform(seed, i, 15, 0));
         float ct = 2.0f*(float)counter_uniform(seed, i, 16, 0) - 1.0f;
         float st = sqrtf(fmaxf(1.0f - ct*ct, 0.0f));
         float ph = 2.0f*PI_F*(float)counter_uniform(seed, i, 17, 0);
         x = r*st*cosf(ph); y = r*st*sinf(ph); z = r*ct;
-        vx = 0.04f*(float)counter_gauss(seed, i, 18, 0);
-        vy = 0.04f*(float)counter_gauss(seed, i, 19, 0);
-        vz = 0.04f*(float)counter_gauss(seed, i, 20, 0);
+        float sig = 0.35f*vcirc(r, Mtot);
+        vx = sig*(float)counter_gauss(seed, i, 18, 0);
+        vy = sig*(float)counter_gauss(seed, i, 19, 0);
+        vz = sig*(float)counter_gauss(seed, i, 20, 0);
         T = 2800.0f + 1800.0f*(float)counter_uniform(seed, i, 21, 0);
     }
     pos[i] = make_float4(x, y, z, T);
@@ -160,16 +190,220 @@ __global__ void kInit(float4* pos, float4* mom, float* tau, unsigned* regime,
     regime[i] = 0x02u;                                // CLASSICAL (derived; inert scene)
 }
 
-__global__ void kTick(const float4* pin, float4* pout, const float4* mom,
-                      float* tau, int N, float dt, float inv2c2){
+__global__ void kInitCloud(float4* pos, float4* mom, float* tau, unsigned* regime,
+                           int N, unsigned long long seed){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
-    float4 p = pin[i], m = mom[i];
-    float im = 1.0f / m.w;
-    p.x += m.x*im*dt; p.y += m.y*im*dt; p.z += m.z*im*dt;
-    pout[i] = p;
+    using namespace orrery;
+    float gx = (float)counter_gauss(seed, i, 0, 1);
+    float gy = (float)counter_gauss(seed, i, 1, 1);
+    float gz = (float)counter_gauss(seed, i, 2, 1);
+    float il = rsqrtf(gx*gx + gy*gy + gz*gz + 1e-12f);
+    float r = 100.0f * cbrtf((float)counter_uniform(seed, i, 3, 1));
+    pos[i] = make_float4(r*gx*il, r*gy*il, r*gz*il, 3800.0f);
+    // sub-virial support (0.35 v_vir): a truly cold pressureless collapse is
+    // singular — unresolvable at any fixed dt (contract changelog, D-014)
+    float sigv = 0.35f*sqrtf(G_DIAL*(float)N/100.0f);
+    mom[i] = make_float4(sigv*(float)counter_gauss(seed, i, 4, 1),
+                         sigv*(float)counter_gauss(seed, i, 5, 1),
+                         sigv*(float)counter_gauss(seed, i, 6, 1), 1.0f);
+    tau[i] = 0.0f; regime[i] = 0x02u;
+}
+
+// --- KDK pieces (frame contract: ping-pong publish; Kahan drift compensation) ---
+__global__ void kKick(float4* mom, const float4* acc, int N, float hdt){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    float4 m = mom[i], a = acc[i];
+    m.x += m.w*a.x*hdt; m.y += m.w*a.y*hdt; m.z += m.w*a.z*hdt;
+    mom[i] = m;
+}
+__global__ void kDriftK(const float4* pin, float4* pout, float4* perr,
+                        const float4* mom, float* tau, unsigned* regime,
+                        int N, float dt, float inv2c2){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    float4 p = pin[i], m = mom[i], e = perr[i];
+    float im = 1.0f/m.w;
+    float3 d = make_float3(m.x*im*dt, m.y*im*dt, m.z*im*dt);
+    float y, t;
+    y = d.x - e.x; t = p.x + y; e.x = (t - p.x) - y; p.x = t;
+    y = d.y - e.y; t = p.y + y; e.y = (t - p.y) - y; p.y = t;
+    y = d.z - e.z; t = p.z + y; e.z = (t - p.z) - y; p.z = t;
+    pout[i] = p; perr[i] = e;
     float v2 = (m.x*m.x + m.y*m.y + m.z*m.z)*im*im;
-    tau[i] += dt * (1.0f - v2*inv2c2);               // weak-field, Phi=0 (inert)
+    tau[i] += dt * (1.0f - v2*inv2c2);
+    regime[i] = (v2 > REL_V2) ? 0x04u : 0x02u;
+}
+
+// --- PM pipeline: fixed-point CIC deposit -> cuFFT -> Green -> force grid -> gather ---
+__global__ void kZeroFix(unsigned long long* g, int n){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i < n) g[i] = 0ull;
+}
+__device__ __forceinline__ int wrapc(int c){ return c & (PMN - 1); }
+__global__ void kDeposit(const float4* pos, const float4* mom, int N, unsigned long long* g){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    float4 p = pos[i];
+    float m = mom[i].w;
+    float gx = (p.x + BOXL*0.5f)/CELL, gy = (p.y + BOXL*0.5f)/CELL, gz = (p.z + BOXL*0.5f)/CELL;
+    int x0 = (int)floorf(gx), y0 = (int)floorf(gy), z0 = (int)floorf(gz);
+    float fx = gx - x0, fy = gy - y0, fz = gz - z0;
+    for (int dz = 0; dz < 2; dz++)
+        for (int dy = 0; dy < 2; dy++)
+            for (int dx = 0; dx < 2; dx++){
+                float w = (dx ? fx : 1.0f - fx)*(dy ? fy : 1.0f - fy)*(dz ? fz : 1.0f - fz);
+                int c = (wrapc(x0 + dx)*PMN + wrapc(y0 + dy))*PMN + wrapc(z0 + dz);
+                orrery::fixed_atomic_add(&g[c], (double)(w*m));   // order-invariant (Invariant 4)
+            }
+}
+__global__ void kFixToReal(const unsigned long long* g, float* r, int n){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i < n) r[i] = (float)orrery::fixed_decode((long long)g[i]);
+}
+__global__ void kGreen(cufftComplex* s){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    int total = PMN*PMN*PMNZC;
+    if (i >= total) return;
+    int z = i % PMNZC, y = (i/PMNZC) % PMN, x = i/(PMNZC*PMN);
+    int fx = (x <= PMN/2) ? x : x - PMN;
+    int fy = (y <= PMN/2) ? y : y - PMN;
+    int fz = z;
+    float kf = 2.0f*PI_F/BOXL;
+    float k2 = kf*kf*(float)(fx*fx + fy*fy + fz*fz);
+    float f = (k2 > 0.0f)
+        ? -4.0f*PI_F*G_DIAL/(k2 * (CELL*CELL*CELL) * (float)(PMN*PMN*PMN))
+        : 0.0f;                                       // k=0: mean density does not gravitate
+    s[i].x *= f; s[i].y *= f;
+}
+__global__ void kForceGrid(const float* phi, float4* F){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    int n = PMN*PMN*PMN;
+    if (i >= n) return;
+    int z = i % PMN, y = (i/PMN) % PMN, x = i/(PMN*PMN);
+    float inv2h = 1.0f/(2.0f*CELL);
+    #define PHI(X,Y,Z) phi[(wrapc(X)*PMN + wrapc(Y))*PMN + wrapc(Z)]
+    float fx = -(PHI(x+1,y,z) - PHI(x-1,y,z))*inv2h;
+    float fy = -(PHI(x,y+1,z) - PHI(x,y-1,z))*inv2h;
+    float fz = -(PHI(x,y,z+1) - PHI(x,y,z-1))*inv2h;
+    #undef PHI
+    F[i] = make_float4(fx, fy, fz, 0.0f);
+}
+__global__ void kGather(const float4* pos, const float4* F, float4* acc, int N){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    float4 p = pos[i];
+    float gx = (p.x + BOXL*0.5f)/CELL, gy = (p.y + BOXL*0.5f)/CELL, gz = (p.z + BOXL*0.5f)/CELL;
+    int x0 = (int)floorf(gx), y0 = (int)floorf(gy), z0 = (int)floorf(gz);
+    float fx = gx - x0, fy = gy - y0, fz = gz - z0;
+    float3 a = make_float3(0, 0, 0);
+    for (int dz = 0; dz < 2; dz++)
+        for (int dy = 0; dy < 2; dy++)
+            for (int dx = 0; dx < 2; dx++){
+                float w = (dx ? fx : 1.0f - fx)*(dy ? fy : 1.0f - fy)*(dz ? fz : 1.0f - fz);
+                float4 f = F[(wrapc(x0 + dx)*PMN + wrapc(y0 + dy))*PMN + wrapc(z0 + dz)];
+                a.x += w*f.x; a.y += w*f.y; a.z += w*f.z;
+            }
+    acc[i] = make_float4(a.x, a.y, a.z, 0.0f);
+}
+__device__ float phiAt(const float* phi, float4 p){
+    float gx = (p.x + BOXL*0.5f)/CELL, gy = (p.y + BOXL*0.5f)/CELL, gz = (p.z + BOXL*0.5f)/CELL;
+    int x0 = (int)floorf(gx), y0 = (int)floorf(gy), z0 = (int)floorf(gz);
+    float fx = gx - x0, fy = gy - y0, fz = gz - z0;
+    float s = 0;
+    for (int dz = 0; dz < 2; dz++)
+        for (int dy = 0; dy < 2; dy++)
+            for (int dx = 0; dx < 2; dx++){
+                float w = (dx ? fx : 1.0f - fx)*(dy ? fy : 1.0f - fy)*(dz ? fz : 1.0f - fz);
+                s += w*phi[(wrapc(x0 + dx)*PMN + wrapc(y0 + dy))*PMN + wrapc(z0 + dz)];
+            }
+    return s;
+}
+
+// --- direct solver (N <= 4096): fixed order, register accumulation, no atomics ---
+__global__ void kDirect(const float4* pos, const float4* mom, float4* acc, int N){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    float4 pi = pos[i];
+    float3 a = make_float3(0, 0, 0);
+    for (int j = 0; j < N; j++){
+        if (j == i) continue;
+        float4 pj = pos[j];
+        float dx = pj.x - pi.x, dy = pj.y - pi.y, dz = pj.z - pi.z;
+        float r2 = dx*dx + dy*dy + dz*dz + 1e-6f;
+        float ir = rsqrtf(r2);
+        float f = G_DIAL*mom[j].w*ir*ir*ir;
+        a.x += f*dx; a.y += f*dy; a.z += f*dz;
+    }
+    acc[i] = make_float4(a.x, a.y, a.z, 0.0f);
+}
+
+// --- tiny solver (N <= 32): one block, many ticks per launch, fp64 internal ---
+// (D-014: tiny scenarios are the sim's precision references; declared state
+//  round-trips through the fp32 frame-contract buffers only at batch edges)
+__device__ double3 tinyAcc(const double3* sp, const double* sm, int N, int i){
+    double3 a = make_double3(0, 0, 0);
+    for (int j = 0; j < N; j++){
+        if (j == i) continue;
+        double dx = sp[j].x - sp[i].x, dy = sp[j].y - sp[i].y, dz = sp[j].z - sp[i].z;
+        double r2 = dx*dx + dy*dy + dz*dz + 1e-6;
+        double ir = rsqrt(r2);
+        double f = (double)G_DIAL*sm[j]*ir*ir*ir;
+        a.x += f*dx; a.y += f*dy; a.z += f*dz;
+    }
+    return a;
+}
+__global__ void kTiny(const float4* pin, float4* pout, float4* mom, float* tau,
+                      unsigned* regime, int N, int steps, float dtf, float inv2c2f){
+    __shared__ double3 sp[32], sv[32], sa[32];
+    __shared__ double  sm[32];
+    int i = threadIdx.x;
+    if (i >= N) return;
+    double dt = (double)dtf, inv2c2 = (double)inv2c2f;
+    float4 P = pin[i], M = mom[i];
+    sp[i] = make_double3(P.x, P.y, P.z);
+    sm[i] = M.w;
+    sv[i] = make_double3(M.x/(double)M.w, M.y/(double)M.w, M.z/(double)M.w);
+    double tu = tau[i];
+    __syncthreads();
+    sa[i] = tinyAcc(sp, sm, N, i);
+    __syncthreads();
+    double hdt = 0.5*dt;
+    for (int s = 0; s < steps; s++){
+        sv[i].x += sa[i].x*hdt; sv[i].y += sa[i].y*hdt; sv[i].z += sa[i].z*hdt;
+        sp[i].x += sv[i].x*dt;  sp[i].y += sv[i].y*dt;  sp[i].z += sv[i].z*dt;
+        __syncthreads();
+        sa[i] = tinyAcc(sp, sm, N, i);
+        __syncthreads();
+        sv[i].x += sa[i].x*hdt; sv[i].y += sa[i].y*hdt; sv[i].z += sa[i].z*hdt;
+        double v2 = sv[i].x*sv[i].x + sv[i].y*sv[i].y + sv[i].z*sv[i].z;
+        tu += dt*(1.0 - v2*inv2c2);
+    }
+    pout[i] = make_float4((float)sp[i].x, (float)sp[i].y, (float)sp[i].z, P.w);
+    mom[i]  = make_float4((float)(sv[i].x*sm[i]), (float)(sv[i].y*sm[i]),
+                          (float)(sv[i].z*sm[i]), (float)sm[i]);
+    tau[i]  = (float)tu;
+    double v2 = sv[i].x*sv[i].x + sv[i].y*sv[i].y + sv[i].z*sv[i].z;
+    regime[i] = (v2 > (double)REL_V2) ? 0x04u : 0x02u;
+}
+
+// --- conservation meters (fixed-point accumulators; PE via PM potential when available)
+// acc slots: 0 KE · 1 PE · 2-4 Px,Py,Pz · 5 Lz · 6 nRel · 7 nClassical
+__global__ void kMeters(const float4* pos, const float4* mom, const float* phi,
+                        int N, unsigned long long* a8){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    float4 p = pos[i], m = mom[i];
+    float im = 1.0f/m.w;
+    double ke = 0.5*(double)(m.x*m.x + m.y*m.y + m.z*m.z)*im;
+    orrery::fixed_atomic_add(&a8[0], ke);
+    if (phi) orrery::fixed_atomic_add(&a8[1], 0.5*(double)m.w*(double)phiAt(phi, p));
+    orrery::fixed_atomic_add(&a8[2], (double)m.x);
+    orrery::fixed_atomic_add(&a8[3], (double)m.y);
+    orrery::fixed_atomic_add(&a8[4], (double)m.z);
+    orrery::fixed_atomic_add(&a8[5], (double)(p.x*m.y - p.y*m.x));
+    atomicAdd(&a8[(m.x*m.x + m.y*m.y + m.z*m.z)*im*im > REL_V2 ? 6 : 7], 1ull);
 }
 
 __global__ void kClear(float4* hdr, int n){
@@ -396,6 +630,21 @@ static cudaStream_t simS, prsS;
 static cudaEvent_t  tickDone;
 static int    gPub = 0;                               // published pos buffer
 
+// --- M2 gravity state ---
+static Scenario gScenario = SC_GALAXY;
+static Solver   gSolver = SOLV_PM;
+static float4 *dAcc = 0, *dPosErr = 0, *dFor = 0;
+static unsigned long long *dFix = 0, *dMet = 0;
+static float  *dReal = 0;
+static cufftComplex *dSpec = 0;
+static cufftHandle planF, planI;
+static double gMTot = 1e6;
+struct Met { double KE, PE, E, Px, Py, Pz, Lz; unsigned long long nRel, nCls; };
+static Met  gM0 = {};                                  // meters at t=0
+static double gDE = 0, gDP = 0;                        // HUD drift readouts
+#define CUFFT_CHECK(call) do { cufftResult _r = (call); if (_r != CUFFT_SUCCESS){ \
+    fprintf(stderr, "cuFFT error %d at %s:%d\n", (int)_r, __FILE__, __LINE__); exit(2);} } while (0)
+
 // camera (damped inertial orbit — CINEMATIC §5)
 struct Spring { float cur, tgt, vel; };
 static Spring cAz = {35, 35, 0}, cEl = {24, 24, 0}, cDist = {5.94f, 5.94f, 0}; // dist is log
@@ -413,9 +662,11 @@ static void springStep(Spring& s, float dt){
     s.cur += s.vel*dt;
 }
 static void applyPreset(int i){
-    if (i == 0){ cAz.tgt = 35;  cEl.tgt = 24; cDist.tgt = logf(380.0f); }
-    if (i == 1){ cAz.tgt = 120; cEl.tgt = 10; cDist.tgt = logf(170.0f); }
-    if (i == 2){ cAz.tgt = 80;  cEl.tgt = 86; cDist.tgt = logf(330.0f); }
+    const float D0[4] = {380.0f, 650.0f, 9.0f, 420.0f};   // per-scenario base distance
+    float d = D0[gScenario];
+    if (i == 0){ cAz.tgt = 35;  cEl.tgt = 24; cDist.tgt = logf(d); }
+    if (i == 1){ cAz.tgt = 120; cEl.tgt = 10; cDist.tgt = logf(0.45f*d); }
+    if (i == 2){ cAz.tgt = 80;  cEl.tgt = 86; cDist.tgt = logf(0.87f*d); }
 }
 
 static void buildCamera(RP& rp){
@@ -503,6 +754,10 @@ static void drawHud(const RP& rp){
     emit(16, 50, line, 0);
     if (gMode) emit(16, 68, "PHYSICAL: L=T4 SAT=1.0 NO CLIP", 0);
     else       emit(16, 68, "CINEMATIC: L=T2.2 SAT=1.2 STRETCH", 0);
+    static const char* SC_HUD[4] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD"};
+    snprintf(line, sizeof line, "%s %s  DE %+.1E  DP %.1E", SC_HUD[gScenario],
+             gSolver == SOLV_PM ? "PM" : (gSolver == SOLV_TINY ? "TINY" : "DIRECT"), gDE, gDP);
+    emit(16, 86, line, 0);
     // render panel (amber, right)
     int rx = gOW - 12*30 - 16;
     snprintf(line, sizeof line, "FPS %.0F  %.1F MS", gFps, gMs);
@@ -524,15 +779,86 @@ static void drawHud(const RP& rp){
 // ----------------------------------------------------------------------------
 // Sim ticks (simStream, ping-pong publish)
 // ----------------------------------------------------------------------------
+// invariant: dAcc = a(dPos[gPub]) after every full tick and after init
+static void forcePass(){
+    dim3 b(256);
+    if (gSolver == SOLV_PM){
+        int nc = PMN*PMN*PMN, ns = PMN*PMN*PMNZC;
+        kZeroFix<<<(nc + 255)/256, b, 0, simS>>>(dFix, nc);
+        kDeposit<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dMom, gN, dFix);
+        kFixToReal<<<(nc + 255)/256, b, 0, simS>>>(dFix, dReal, nc);
+        CUFFT_CHECK(cufftExecR2C(planF, dReal, dSpec));
+        kGreen<<<(ns + 255)/256, b, 0, simS>>>(dSpec);
+        CUFFT_CHECK(cufftExecC2R(planI, dSpec, dReal));   // dReal now holds Phi
+        kForceGrid<<<(nc + 255)/256, b, 0, simS>>>(dReal, dFor);
+        kGather<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dFor, dAcc, gN);
+    } else if (gSolver == SOLV_DIRECT){
+        kDirect<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dMom, dAcc, gN);
+    }
+}
+
 static void runTicks(int nt){
-    for (int t = 0; t < nt; t++){
+    const float inv2c2 = 1.0f/(2.0f*C_LIGHT*C_LIGHT), hdt = 0.5f*DT;
+    if (gSolver == SOLV_TINY){
         int src = gPub, dst = 1 - gPub;
-        kTick<<<(gN + 255)/256, 256, 0, simS>>>(dPos[src], dPos[dst], dMom, dTau,
-                                                gN, DT, 1.0f/(2.0f*C_LIGHT*C_LIGHT));
-        gPub = dst; gTick++; gSimTime += DT;
+        kTiny<<<1, 32, 0, simS>>>(dPos[src], dPos[dst], dMom, dTau, dRegime,
+                                  gN, nt, DT, inv2c2);
+        gPub = dst; gTick += nt; gSimTime += (double)nt*DT;
+    } else {
+        dim3 b(256), g((gN + 255)/256);
+        for (int t = 0; t < nt; t++){
+            kKick<<<g, b, 0, simS>>>(dMom, dAcc, gN, hdt);
+            int src = gPub, dst = 1 - gPub;
+            kDriftK<<<g, b, 0, simS>>>(dPos[src], dPos[dst], dPosErr, dMom, dTau,
+                                       dRegime, gN, DT, inv2c2);
+            gPub = dst;
+            forcePass();
+            kKick<<<g, b, 0, simS>>>(dMom, dAcc, gN, hdt);
+            gTick++; gSimTime += DT;
+        }
     }
     CUDA_CHECK(cudaEventRecord(tickDone, simS));
     CUDA_CHECK(cudaStreamWaitEvent(prsS, tickDone, 0));
+}
+
+// conservation meters. Big-N: device fixed-point accumulators (order-invariant,
+// 2^-32 quanta declared). Tiny-N: host fp64 with exact pairwise PE.
+static Met metersNow(){
+    Met M = {};
+    if (gSolver == SOLV_TINY || gN <= 4096){
+        std::vector<float4> hp(gN), hm(gN);
+        CUDA_CHECK(cudaStreamSynchronize(simS));
+        CUDA_CHECK(cudaMemcpy(hp.data(), dPos[gPub], gN*sizeof(float4), cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(hm.data(), dMom, gN*sizeof(float4), cudaMemcpyDeviceToHost));
+        for (int i = 0; i < gN; i++){
+            double m = hm[i].w;
+            M.KE += 0.5*((double)hm[i].x*hm[i].x + (double)hm[i].y*hm[i].y + (double)hm[i].z*hm[i].z)/m;
+            M.Px += hm[i].x; M.Py += hm[i].y; M.Pz += hm[i].z;
+            M.Lz += (double)hp[i].x*hm[i].y - (double)hp[i].y*hm[i].x;
+            double v2 = ((double)hm[i].x*hm[i].x + (double)hm[i].y*hm[i].y + (double)hm[i].z*hm[i].z)/(m*m);
+            if (v2 > REL_V2) M.nRel++; else M.nCls++;
+            for (int j = i + 1; j < gN; j++){
+                double dx = hp[j].x - hp[i].x, dy = hp[j].y - hp[i].y, dz = hp[j].z - hp[i].z;
+                M.PE -= (double)G_DIAL*m*hm[j].w/sqrt(dx*dx + dy*dy + dz*dz + 1e-6);
+            }
+        }
+    } else {
+        CUDA_CHECK(cudaMemsetAsync(dMet, 0, 8*sizeof(unsigned long long), simS));
+        kMeters<<<(gN + 255)/256, 256, 0, simS>>>(dPos[gPub], dMom,
+                gSolver == SOLV_PM ? dReal : nullptr, gN, dMet);
+        unsigned long long h[8];
+        CUDA_CHECK(cudaStreamSynchronize(simS));
+        CUDA_CHECK(cudaMemcpy(h, dMet, sizeof h, cudaMemcpyDeviceToHost));
+        M.KE = orrery::fixed_decode((long long)h[0]);
+        M.PE = orrery::fixed_decode((long long)h[1]);
+        M.Px = orrery::fixed_decode((long long)h[2]);
+        M.Py = orrery::fixed_decode((long long)h[3]);
+        M.Pz = orrery::fixed_decode((long long)h[4]);
+        M.Lz = orrery::fixed_decode((long long)h[5]);
+        M.nRel = h[6]; M.nCls = h[7];
+    }
+    M.E = M.KE + M.PE;
+    return M;
 }
 
 // ----------------------------------------------------------------------------
@@ -587,10 +913,71 @@ static void allocAll(){
     CUDA_CHECK(cudaStreamCreateWithPriority(&simS, cudaStreamNonBlocking, lo));
     CUDA_CHECK(cudaStreamCreateWithPriority(&prsS, cudaStreamNonBlocking, hi));
     CUDA_CHECK(cudaEventCreateWithFlags(&tickDone, cudaEventDisableTiming));
-    kInit<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed);
+    // gravity buffers + plans
+    CUDA_CHECK(cudaMalloc(&dAcc,    (size_t)gN*sizeof(float4)));
+    CUDA_CHECK(cudaMalloc(&dPosErr, (size_t)gN*sizeof(float4)));
+    CUDA_CHECK(cudaMemset(dPosErr, 0, (size_t)gN*sizeof(float4)));
+    CUDA_CHECK(cudaMemset(dAcc, 0, (size_t)gN*sizeof(float4)));
+    CUDA_CHECK(cudaMalloc(&dFix,  (size_t)PMN*PMN*PMN*sizeof(unsigned long long)));
+    CUDA_CHECK(cudaMalloc(&dReal, (size_t)PMN*PMN*PMN*sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&dSpec, (size_t)PMN*PMN*PMNZC*sizeof(cufftComplex)));
+    CUDA_CHECK(cudaMalloc(&dFor,  (size_t)PMN*PMN*PMN*sizeof(float4)));
+    CUDA_CHECK(cudaMalloc(&dMet,  8*sizeof(unsigned long long)));
+    CUFFT_CHECK(cufftPlan3d(&planF, PMN, PMN, PMN, CUFFT_R2C));
+    CUFFT_CHECK(cufftPlan3d(&planI, PMN, PMN, PMN, CUFFT_C2R));
+    CUFFT_CHECK(cufftSetStream(planF, simS));
+    CUFFT_CHECK(cufftSetStream(planI, simS));
+
+    // scenario init (contracts/newton.contract.md)
+    switch (gScenario){
+    case SC_GALAXY:
+        gMTot = (double)gN * 1.0;
+        kInit<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed, (float)gMTot);
+        gSolver = SOLV_PM;
+        break;
+    case SC_CLOUD:
+        gMTot = (double)gN * 1.0;
+        kInitCloud<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed);
+        gSolver = SOLV_PM;
+        break;
+    case SC_KEPLER: {
+        gN = 2; gMTot = 10001.0;
+        double mu = (double)G_DIAL*10001.0, rap = 240.0, a = 150.0;
+        double vap = sqrt(mu*(2.0/rap - 1.0/a));
+        float4 hp[2] = { make_float4((float)(-rap/10001.0), 0, 0, 6500.0f),
+                         make_float4((float)( rap*10000.0/10001.0), 0, 0, 9000.0f) };
+        float4 hm[2] = { make_float4(0, (float)(-vap/10001.0*1e4), 0, 1e4f),
+                         make_float4(0, (float)( vap*10000.0/10001.0), 0, 1.0f) };
+        float ht[2] = {0, 0}; unsigned hr[2] = {0x02u, 0x02u};
+        CUDA_CHECK(cudaMemcpy(dPos[0], hp, sizeof hp, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dMom, hm, sizeof hm, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dTau, ht, sizeof ht, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dRegime, hr, sizeof hr, cudaMemcpyHostToDevice));
+        gSolver = SOLV_TINY;
+    } break;
+    case SC_THREEBODY: {
+        gN = 3; gMTot = 3.0;
+        double sf = sqrt((double)G_DIAL);              // velocity rescale for G != 1
+        float4 hp[3] = { make_float4( 0.97000436f, -0.24308753f, 0, 6000.0f),
+                         make_float4(-0.97000436f,  0.24308753f, 0, 8000.0f),
+                         make_float4(0, 0, 0, 11000.0f) };
+        float4 hm[3] = { make_float4((float)(0.4662036850*sf), (float)(0.4323657300*sf), 0, 1.0f),
+                         make_float4((float)(0.4662036850*sf), (float)(0.4323657300*sf), 0, 1.0f),
+                         make_float4((float)(-0.93240737*sf),  (float)(-0.86473146*sf),  0, 1.0f) };
+        float ht[3] = {0, 0, 0}; unsigned hr[3] = {0x02u, 0x02u, 0x02u};
+        CUDA_CHECK(cudaMemcpy(dPos[0], hp, sizeof hp, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dMom, hm, sizeof hm, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dTau, ht, sizeof ht, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dRegime, hr, sizeof hr, cudaMemcpyHostToDevice));
+        gSolver = SOLV_TINY;
+    } break;
+    }
     CUDA_CHECK(cudaMemcpy(dPos[1], dPos[0], (size_t)gN*sizeof(float4),
                           cudaMemcpyDeviceToDevice));
     CUDA_CHECK(cudaDeviceSynchronize());
+    forcePass();                                      // establish dAcc = a(x0); Phi for meters
+    CUDA_CHECK(cudaStreamSynchronize(simS));
+    gM0 = metersNow();
 }
 
 // ----------------------------------------------------------------------------
@@ -699,6 +1086,8 @@ int main(int argc, char** argv){
     SetProcessDPIAware();
     const char* shotPath = 0;
     int benchFrames = 0, shotFrames = 180;
+    long long warmTicks = 0, runSteps = 0;
+    bool jsonMode = false, goldenMode = false;
     for (int i = 1; i < argc; i++){
         std::string a = argv[i];
         if      (a == "--n" && i+1 < argc)      gN = atoi(argv[++i]);
@@ -711,11 +1100,26 @@ int main(int argc, char** argv){
         else if (a == "--bench" && i+1 < argc)  benchFrames = atoi(argv[++i]);
         else if (a == "--shot" && i+1 < argc)   shotPath = argv[++i];
         else if (a == "--frames" && i+1 < argc) shotFrames = atoi(argv[++i]);
-        else { fprintf(stderr, "usage: tinyuniverse [--w W --h H] [--n N] [--seed S] "
-                       "[--ssaa] [--bench F] [--shot PATH.bmp [--frames N]]\n"); return 2; }
+        else if (a == "--warm" && i+1 < argc)   warmTicks = atoll(argv[++i]);
+        else if (a == "--steps" && i+1 < argc)  runSteps = atoll(argv[++i]);
+        else if (a == "--json")                 jsonMode = true;
+        else if (a == "--golden")               goldenMode = true;
+        else if (a == "--scenario" && i+1 < argc){
+            std::string s = argv[++i];
+            if      (s == "galaxy")    gScenario = SC_GALAXY;
+            else if (s == "kepler")    gScenario = SC_KEPLER;
+            else if (s == "threebody") gScenario = SC_THREEBODY;
+            else if (s == "cloud")     gScenario = SC_CLOUD;
+            else { fprintf(stderr, "error: unknown scenario\n"); return 2; }
+        }
+        else { fprintf(stderr, "usage: tinyuniverse [--scenario galaxy|kepler|threebody|cloud] "
+                       "[--w W --h H] [--n N] [--seed S] [--ssaa] [--phys] [--aces] [--bench F] "
+                       "[--shot PATH.bmp [--frames N] [--warm T]] [--steps S --json] [--golden]\n");
+               return 2; }
     }
     gOW &= ~1; gOH &= ~1;
     if (gN < 1000) gN = 1000;
+    if (goldenMode) gSeed = 20260711ull;              // frozen seed at init time
 
     CUDA_CHECK(cudaSetDevice(0));
     cudaDeviceProp prop;
@@ -728,9 +1132,109 @@ int main(int argc, char** argv){
     rp.RW = gOW*gSS; rp.RH = gOH*gSS; rp.OW = gOW; rp.OH = gOH; rp.ss = gSS;
     rp.bloomAmt = 0.035f; rp.satCine = 1.20f;
 
+    if (jsonMode || goldenMode){                      // headless instrument face (newton contract)
+        if (goldenMode){                              // frozen golden params (seed forced pre-init)
+            const long long GS[4] = {10000, 1000000, 1000000, 12000};
+            runSteps = GS[gScenario];
+        }
+        if (runSteps <= 0){
+            const long long GS[4] = {10000, 1000000, 1000000, 12000};
+            runSteps = GS[gScenario];
+        }
+        long long done = 0, nextPct = 10;
+        const int batch = (gSolver == SOLV_TINY) ? 20000 : 250;
+        while (done < runSteps){
+            int nt = (int)((runSteps - done) < batch ? (runSteps - done) : batch);
+            runTicks(nt);
+            done += nt;
+            if (done*100 >= runSteps*nextPct){
+                CUDA_CHECK(cudaStreamSynchronize(simS));
+                fprintf(stderr, "  %lld%%\r", nextPct); nextPct += 10;
+            }
+        }
+        CUDA_CHECK(cudaStreamSynchronize(simS));
+        Met M1 = metersNow();
+
+        // declared state hash: raw pos/mom/tau/regime bytes at the final tick
+        std::string bytes;
+        bytes.resize((size_t)gN*(16 + 16 + 4 + 4));
+        char* w = &bytes[0];
+        CUDA_CHECK(cudaMemcpy(w, dPos[gPub], (size_t)gN*16, cudaMemcpyDeviceToHost)); w += (size_t)gN*16;
+        CUDA_CHECK(cudaMemcpy(w, dMom,       (size_t)gN*16, cudaMemcpyDeviceToHost)); w += (size_t)gN*16;
+        CUDA_CHECK(cudaMemcpy(w, dTau,       (size_t)gN*4,  cudaMemcpyDeviceToHost)); w += (size_t)gN*4;
+        CUDA_CHECK(cudaMemcpy(w, dRegime,    (size_t)gN*4,  cudaMemcpyDeviceToHost));
+        std::string shash = orrery::blake2b_hex(bytes, 32);
+
+        double pnorm = sqrt(2.0*gMTot*(gM0.KE > 1e-12 ? gM0.KE : fabs(gM0.E) + 1e-12));
+        double de = fabs((M1.E - gM0.E)/(fabs(gM0.E) > 1e-12 ? fabs(gM0.E) : 1.0));
+        double dp = sqrt((M1.Px-gM0.Px)*(M1.Px-gM0.Px) + (M1.Py-gM0.Py)*(M1.Py-gM0.Py)
+                       + (M1.Pz-gM0.Pz)*(M1.Pz-gM0.Pz)) / (pnorm > 1e-12 ? pnorm : 1.0);
+        double lnorm = fabs(gM0.Lz) > pnorm*BOXL/8.0 ? fabs(gM0.Lz) : pnorm*BOXL/8.0;
+        double dl = fabs(M1.Lz - gM0.Lz)/lnorm;
+        double maxr = 0;
+        if (gSolver == SOLV_TINY){
+            std::vector<float4> hp(gN);
+            CUDA_CHECK(cudaMemcpy(hp.data(), dPos[gPub], gN*sizeof(float4), cudaMemcpyDeviceToHost));
+            for (int q = 0; q < gN; q++){
+                double r = sqrt((double)hp[q].x*hp[q].x + (double)hp[q].y*hp[q].y + (double)hp[q].z*hp[q].z);
+                if (r > maxr) maxr = r;
+            }
+        }
+        bool pass = false;
+        std::string gates;
+        using namespace orrery;
+        auto B = [](bool b){ return std::string(b ? "true" : "false"); };
+        switch (gScenario){
+        case SC_KEPLER:
+            pass = (de < 2e-3) && (dl < 2e-3);
+            gates = "\"de_lt_2e-3\":" + B(de < 2e-3) + ",\"dl_lt_2e-3\":" + B(dl < 2e-3);
+            break;
+        case SC_THREEBODY:
+            pass = (de < 2e-3) && (maxr < 5.0);
+            gates = "\"de_lt_2e-3\":" + B(de < 2e-3) + ",\"max_r\":" + fmt6(maxr)
+                  + ",\"bounded_r_lt_5\":" + B(maxr < 5.0);
+            break;
+        case SC_CLOUD:
+            pass = (de < 0.08) && (dp < 1e-3);
+            gates = "\"de_lt_8e-2\":" + B(de < 0.08) + ",\"dp_lt_1e-3\":" + B(dp < 1e-3);
+            break;
+        case SC_GALAXY:
+            pass = (de < 0.02) && (dp < 1e-3);
+            gates = "\"de_lt_2e-2\":" + B(de < 0.02) + ",\"dp_lt_1e-3\":" + B(dp < 1e-3);
+            break;
+        }
+        const char* solvName = gSolver == SOLV_PM ? "pm" : (gSolver == SOLV_TINY ? "tiny" : "direct");
+        std::string body =
+              std::string("\"seed\":") + fmti((long long)gSeed)
+            + ",\"params\":{\"scenario\":\"" + SC_NAME[gScenario] + "\",\"n\":" + fmti(gN)
+            + ",\"steps\":" + fmti(runSteps) + ",\"solver\":\"" + solvName + "\""
+            + ",\"c\":" + fmt6(20.0) + ",\"hbar\":" + fmt6(0.5) + ",\"G\":" + fmt6(0.002)
+            + ",\"dt\":" + fmt6(1.0/240.0) + ",\"L_box\":" + fmt6(512.0) + "}"
+            + ",\"result\":{\"state_b2b\":\"" + shash + "\""
+            + ",\"e0\":" + fmt6(gM0.E) + ",\"e1\":" + fmt6(M1.E)
+            + ",\"de_rel\":" + fmt6(de) + ",\"p_drift\":" + fmt6(dp) + ",\"l_drift\":" + fmt6(dl)
+            + ",\"n_rel\":" + fmti((long long)M1.nRel) + ",\"n_classical\":" + fmti((long long)M1.nCls) + "}"
+            + ",\"gates\":{" + gates + "}"
+            + ",\"verdict\":\"" + (pass ? "pass" : "fail") + "\"";
+        std::string env = full_envelope("tinyuniverse", "0.2.0", body,
+                                        "newton scenario run; visuals non-declared");
+        if (goldenMode)
+            return golden_check(SC_NAME[gScenario], declared_object(body), env);
+        printf("%s\n", env.c_str());
+        fprintf(stderr, "declared[%s] %s\n", SC_NAME[gScenario],
+                blake2b_hex(declared_object(body)).c_str());
+        return pass ? 0 : 1;
+    }
+
     if (shotPath){                                    // headless render-to-BMP
         applyPreset(0);
         cAz.cur = cAz.tgt; cEl.cur = cEl.tgt; cDist.cur = cDist.tgt;
+        while (warmTicks > 0){                        // evolve before the beauty pass
+            int nt = (int)(warmTicks < 250 ? warmTicks : 250);
+            runTicks(nt);
+            warmTicks -= nt;
+        }
+        CUDA_CHECK(cudaStreamSynchronize(simS));
         for (int f = 0; f < shotFrames; f++){
             if (!gPaused) runTicks(4);
             rp.mode = gMode; rp.tonemap = gTonemap; rp.bloomOn = gBloomOn; rp.frame = gFrame++;
@@ -783,6 +1287,13 @@ int main(int argc, char** argv){
         if (!gPaused){
             int nt = (int)(dtF/DT + 0.5f); nt = nt < 1 ? 1 : (nt > 8 ? 8 : nt);
             runTicks(nt);
+        }
+        if (gFrame % 120 == 60){                      // HUD conservation meters (~2 s cadence)
+            Met m = metersNow();
+            gDE = (m.E - gM0.E)/(fabs(gM0.E) > 1e-12 ? fabs(gM0.E) : 1.0);
+            double pn = sqrt(2.0*gMTot*(gM0.KE > 1e-12 ? gM0.KE : 1.0));
+            gDP = sqrt((m.Px-gM0.Px)*(m.Px-gM0.Px) + (m.Py-gM0.Py)*(m.Py-gM0.Py)
+                     + (m.Pz-gM0.Pz)*(m.Pz-gM0.Pz))/pn;
         }
         rp.mode = gMode; rp.tonemap = gTonemap; rp.bloomOn = gBloomOn; rp.frame = gFrame++;
         buildCamera(rp);
