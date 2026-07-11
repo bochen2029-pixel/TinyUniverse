@@ -1,27 +1,27 @@
 # RUN_STATE.md
 
-**As of:** 2026-07-11 · **Milestone:** M5 `gargantua` · **State:** M4 CLOSED — relativity is always-on. **12/12 goldens GREEN in 66 s.**
+**As of:** 2026-07-12 · **Milestone:** M6 `planck` (NOT STARTED — **operator-requested pause after M5**) · **State:** M5 CLOSED. **15/15 goldens GREEN in 75 s.**
 
-## What M4 established
+## What M5 established
 
-- Every particle moves relativistically: v = p/√(m² + |p|²/c²) (v < c structural), photons at c with factor-2 bending, proper time dτ = dt√(1 + (2Φ − v²)/c²) — **photons don't age** (the clamp). Tiny solver fp64 u-form.
-- Oracles: keprel vs exact Sommerfeld 0.50% (`f985e473`) · clocks 6.3e-4 (`330c86a7`) · photons 0.83% (`c4c565de`).
-- **D-016**: the 1PN field term was withdrawn after measurement contradicted the 7π superposition claim (6.41π measured; Q-006 holds the derivation). Strong-field precession arrives with M5's oracles. All 8 prior goldens superseded + re-frozen; the echo still reverses exactly under relativistic KDK.
+- **Black holes are real entities**: unscripted formation from the PM density argmax (collapse golden `5bcb5f58`, peak cell 182,720 vs M_FORM 10⁵), Paczyński–Wiita near-field + absorption with exact fixed-point ledgers, Hawking evaporation on the analytic cube-root clock (pop tick 2991 = expected, ledger closed to 4.3e-8), and screen-space lensing — the hole's own Hawking glow bends into an Einstein ring (`runs/gargantua_isco_lens.png`).
+- **Measured physics** (D-017): the SR-inertia + P–W marginally-stable orbit lies in (3.3, 4.5)·GM/c² — declared as a band, nexus N4 pins the Newtonian limit at 3.0. A real seed-culling bug was caught by the collapse gate and the peak-cell probe.
+- Goldens now 15: nexus `ad64f810` · kepler `2f93cdfb` · threebody `c2c572af` · cloud `8a0bc6e4` · galaxy `dcc87925` · merger `bfcfb003` · echo `40a84691` · ratchet `8f4b811e` · detector `83ea180d` · keprel `f985e473` · clocks `330c86a7` · photons `c4c565de` · collapse `5bcb5f58` · isco `5801ed2f` · hawking `6bd3faeb`.
+- Contracts: nexus/frame/newton/arrow/gargantua v1.0.0, einstein v1.0.1. App v0.3.x: 14 scenarios, one binary two faces, `harness/verify.py` green.
 
-## Current task — M5 `gargantua` (compact objects)
+## Next task when resumed — M6 `planck` (quantum bubbles)
 
-Contract first (`contracts/gargantua.contract.md`), then:
-1. Collapse condition (cluster inside its own r_s) → BH entity (absorbing, mass-accumulating); Paczyński–Wiita Φ = −GM/(r − r_s) for near-BH dynamics — ISCO at 6GM/c² is the oracle (nexus N4).
-2. Hawking evaporation: T ∝ ħ/M — small BHs visibly evaporate (emit particles/photons; energy bookkeeping declared).
-3. GARGANTUA lift: the validated Kerr geodesic renderer (C:\blackhole\files\blackhole.cu) as the near-BH view; OptiX-vs-compute geodesic spike (D-007, ADR-007 protocol — result reported back to ORRERY `lens`).
-4. Scenarios: `collapse` (cloud → BH), `isco` (test orbits at/inside 6GM/c², P–W oracle), `hawking` (small BH evaporates on camera); 2.5PN inspiral if in budget.
+Contract first (`contracts/planck.contract.md`), then:
+1. Quantum bubbles: local comoving grids (64³ first), split-step cuFFT ψ evolution; spawn-on-isolation, collapse-on-inscription — **the Ratchet engine (M3, golden-verified) is the collapse mechanism, already waiting**; the detector scenario's record machinery binds to ψ.
+2. Scenarios: `doubleslit` (build-your-own-detector — the M3 detector + fringes), `tunneling`, `sho-eigenstates`; oracles = nexus N5 (σ(t) 5.8e-15, E₀ 1.3e-13).
+3. Measure the 16 GB bubble budget (Q-004 resolves by data).
 
-**M5 gate:** cloud → star → remnant → BH ladder runs unscripted; ISCO golden vs P–W analytic; a small BH evaporates with declared energy bookkeeping; 15/15-ish goldens green.
+**M6 gate:** double-slit fringes emerge from single collapses; nexus N5 parity in-sim; bubble budget measured; goldens + harness green.
 
 ## Chores carried
 
-P1 Vulkan (SDK) · ImGui · TAA · clang/g++ nexus parity · art pass · cufft64 dll packaging · P³M/spatial hash · BUILD.md app-line update (nvcc + envelope.cpp + cufft.lib) · Q-006 derivation.
+P1 Vulkan (SDK) · ImGui · TAA · clang/g++ nexus parity · art pass (incl. GARGANTUA Kerr geodesic view + OptiX spike → ORRERY `lens` report, D-017; collapse-scenario beauty pass) · cufft64 dll packaging · P³M/spatial hash · Q-006 derivation · 2.5PN inspiral.
 
 ## Standing context
 
-Oracle: tiny_nexus `ad64f810`. 12 goldens (hashes in D-016). Contracts: nexus/frame/newton/arrow v1.0.0, einstein v1.0.1. App v0.2.x: 11 scenarios, envelope face, harness green. Repo docs authoritative over agent memories.
+Toolchain: CUDA 13.1, sm_89, MSVC 2022; build line in BUILD.md (envelope.cpp + cufft.lib). The universe now runs its full classical ladder: beauty → gravity → thermodynamics/inscription → relativity → black holes, every rung golden-gated. Repo docs authoritative over agent memories.

@@ -10,10 +10,10 @@ CPU (nexus — any C++17, MSVC shown; clang++/g++ parity required like ASTRA-7):
 cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 nexus\tiny_nexus.cpp /Fe:build\tiny_nexus.exe'
 ```
 
-CUDA:
+CUDA — the app (from M2 it links liborrery's envelope + cuFFT; cufft64 runtime dll comes from the toolkit redist, D-014):
 
 ```
-cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1 && nvcc -O3 -arch=sm_89 <module>.cu core\lib\envelope.cpp -o build\<module>.exe'
+cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\tinyuniverse.exe app\tinyuniverse.cu core\lib\envelope.cpp user32.lib gdi32.lib opengl32.lib cufft.lib'
 ```
 
 ## CMake preset (multi-file; app from M1)

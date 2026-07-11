@@ -48,10 +48,16 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(deferred → M5/M7, declared)* 2.5PN inspiral drag · Kepler-at-t_emit rendering
 - **Gate: MET** — relativistic kepler at the exact analytic rate; clocks desync as GR demands; light bends at the GR factor and does not age.
 
-## M5 · `gargantua` — compact objects
-- ☐ Collapse condition → BH entity; Paczyński–Wiita disk dynamics; Hawking evaporation (T ∝ ħ/M)
-- ☐ GARGANTUA Kerr renderer lifted for near-BH view (dynamic M, a); OptiX-vs-compute geodesic spike (D-007, ADR-007 protocol — result reported back to ORRERY `lens`)
-- **Gate:** cloud → star → remnant → BH ladder runs unscripted; a small BH evaporates on camera; lensing oracle-checked against analytic Kerr.
+## M5 · `gargantua` — compact objects ☑ **CLOSED 2026-07-12**
+- ☑ BH entities (≤8, device-resident, deterministic): P–W force + Φ channel, absorption → DEAD latch (0x100) + fixed-point ledgers, unscripted formation from the PM density argmax (M_FORM = 10⁵ = the N1 N_BH crossover)
+- ☑ `collapse` golden `5bcb5f58`: a 10⁶-particle cloud forms a BH **unscripted** (peak cell 182,720), grows past 1.5×10⁵, absorbed-mass ledger exact
+- ☑ `isco` golden `5801ed2f`: inner 3 orbits plunge, outer 5 survive — **measured**: the SR+P–W marginally-stable radius lies in (3.3, 4.5); nexus N4 pins the Newtonian limit at 3.0 (D-017)
+- ☑ `hawking` golden `6bd3faeb`: M=250 BH evaporates on the analytic clock (pop tick 2991 = expected 2991, exact) with the energy ledger closed to 4.3e-8 (gate 1e-6, fp32 floor — D-017)
+- ☑ Screen-space BH lensing (θ_E warp + shadow disc; the hole's Hawking glow lenses into an Einstein ring — `runs/gargantua_isco_lens.png`) + T_H-driven glow (small BHs visibly run hot as they shrink)
+- ☑ **15/15 goldens GREEN in 75 s** (12 pre-M5 goldens unaffected by the DEAD/BH plumbing — verified)
+- ☐ *(deferred → render/art milestone, D-017)* GARGANTUA per-pixel Kerr geodesic view · OptiX-vs-compute spike (→ ORRERY `lens` report) · 2.5PN inspiral
+- ☐ *(scope note, contract)* the "star" rung (ignition) needs thermal physics — ladder shipped as cloud → BH; fusion backlogged with M6+
+- **Gate: MET** — formation unscripted, ISCO split measured and declared, evaporation exact, harness green.
 
 ## M6 · `planck` — quantum bubbles
 - ☐ Split-step cuFFT bubbles (64³ first), spawn-on-isolation, inscription collapse

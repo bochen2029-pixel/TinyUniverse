@@ -53,11 +53,19 @@
 #define REL_V2   1.0f            // (0.05c)^2 = 1 su^2/s^2 — regime threshold
 enum Scenario { SC_GALAXY = 0, SC_KEPLER, SC_THREEBODY, SC_CLOUD,
                 SC_MERGER, SC_ECHO, SC_RATCHET, SC_DETECTOR,
-                SC_KEPREL, SC_CLOCKS, SC_PHOTONS };
+                SC_KEPREL, SC_CLOCKS, SC_PHOTONS,
+                SC_COLLAPSE, SC_ISCO, SC_HAWKING };
 enum Solver   { SOLV_PM = 0, SOLV_DIRECT, SOLV_TINY, SOLV_NONE };
-static const char* SC_NAME[11] = {"galaxy", "kepler", "threebody", "cloud",
+static const char* SC_NAME[14] = {"galaxy", "kepler", "threebody", "cloud",
                                   "merger", "echo", "ratchet", "detector",
-                                  "keprel", "clocks", "photons"};
+                                  "keprel", "clocks", "photons",
+                                  "collapse", "isco", "hawking"};
+// gargantua contract: BH constants (dial-derived)
+#define NBH_MAX  8
+#define RS_PER_M 1.0e-5f                   // 2G/c^2
+#define M_FORM   1.0e5f                    // r_s = CELL/4 (the N1 N_BH crossover)
+#define M_POP    50.0f
+#define REG_DEAD 0x100u
 // arrow contract: ratchet constants (N6/ORRERY), record thresholds
 #define RATCHET_PDOWN 0.4166666666666667   // p/(p+(1-p)rho), p=0.3 rho=0.6
 #define REC_THRESH 16u
@@ -86,6 +94,9 @@ struct RP {
     int   tonemap;         // 0 AgX, 1 ACES
     int   bloomOn;
     unsigned frame;
+    // M5: screen-space BH lenses (render-res pixels; visuals non-declared)
+    int   nLens;
+    float lensX[4], lensY[4], lensTE2[4], lensShadow[4];
 };
 
 // ----------------------------------------------------------------------------
@@ -200,7 +211,7 @@ __global__ void kInit(float4* pos, float4* mom, float* tau, unsigned* regime,
 }
 
 __global__ void kInitCloud(float4* pos, float4* mom, float* tau, unsigned* regime,
-                           int N, unsigned long long seed){
+                           int N, unsigned long long seed, float R, float sigFrac){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
     using namespace orrery;
@@ -208,11 +219,11 @@ __global__ void kInitCloud(float4* pos, float4* mom, float* tau, unsigned* regim
     float gy = (float)counter_gauss(seed, i, 1, 1);
     float gz = (float)counter_gauss(seed, i, 2, 1);
     float il = rsqrtf(gx*gx + gy*gy + gz*gz + 1e-12f);
-    float r = 100.0f * cbrtf((float)counter_uniform(seed, i, 3, 1));
+    float r = R * cbrtf((float)counter_uniform(seed, i, 3, 1));
     pos[i] = make_float4(r*gx*il, r*gy*il, r*gz*il, 3800.0f);
-    // sub-virial support (0.35 v_vir): a truly cold pressureless collapse is
-    // singular — unresolvable at any fixed dt (contract changelog, D-014)
-    float sigv = 0.35f*sqrtf(G_DIAL*(float)N/100.0f);
+    // sub-virial support: a truly cold pressureless collapse is singular —
+    // unresolvable at any fixed dt (D-014); collapse scenario runs colder (D-017)
+    float sigv = sigFrac*sqrtf(G_DIAL*(float)N/R);
     mom[i] = make_float4(sigv*(float)counter_gauss(seed, i, 4, 1),
                          sigv*(float)counter_gauss(seed, i, 5, 1),
                          sigv*(float)counter_gauss(seed, i, 6, 1), 1.0f);
@@ -232,9 +243,11 @@ __device__ __forceinline__ float3 velOf(float4 m){
     float ir = C_LIGHT*rsqrtf(fmaxf(p2, 1e-30f));
     return make_float3(m.x*ir, m.y*ir, m.z*ir);
 }
-__global__ void kKick(float4* mom, const float4* acc, int N, float hdt){
+__global__ void kKick(float4* mom, const float4* acc, const unsigned* regime,
+                      int N, float hdt){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
+    if (regime[i] & REG_DEAD) return;                 // absorbed: frozen
     float4 m = mom[i], a = acc[i];                    // a.xyz = g, a.w = Phi
     const float ic2 = 1.0f/(C_LIGHT*C_LIGHT);
     if (m.w > 0.0f){
@@ -255,6 +268,10 @@ __global__ void kDriftK(const float4* pin, float4* pout, float4* perr,
                         const float* phi, int N, float dt, float invc2){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
+    if (regime[i] & REG_DEAD){                        // absorbed: park out of the box
+        pout[i] = make_float4(1.0e6f + (float)i*1.0e-3f, 0, 0, pin[i].w);
+        return;
+    }
     float4 p = pin[i], m = mom[i], e = perr[i];
     float3 v = velOf(m);
     float3 d = make_float3(v.x*dt, v.y*dt, v.z*dt);
@@ -276,9 +293,11 @@ __global__ void kZeroFix(unsigned long long* g, int n){
     if (i < n) g[i] = 0ull;
 }
 __device__ __forceinline__ int wrapc(int c){ return c & (PMN - 1); }
-__global__ void kDeposit(const float4* pos, const float4* mom, int N, unsigned long long* g){
+__global__ void kDeposit(const float4* pos, const float4* mom, const unsigned* regime,
+                         int N, unsigned long long* g){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
+    if (regime[i] & REG_DEAD) return;                 // absorbed mass lives in the BH now
     float4 p = pos[i];
     float m = mom[i].w;
     float gx = (p.x + BOXL*0.5f)/CELL, gy = (p.y + BOXL*0.5f)/CELL, gz = (p.z + BOXL*0.5f)/CELL;
@@ -449,10 +468,11 @@ __global__ void kTiny(const float4* pin, float4* pout, float4* mom, float* tau,
 
 // --- conservation meters (fixed-point accumulators; PE via PM potential when available)
 // acc slots: 0 KE · 1 PE · 2-4 Px,Py,Pz · 5 Lz · 6 nRel · 7 nClassical
-__global__ void kMeters(const float4* pos, const float4* mom, const float* phi,
-                        int N, unsigned long long* a8){
+__global__ void kMeters(const float4* pos, const float4* mom, const unsigned* regime,
+                        const float* phi, int N, unsigned long long* a8){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
+    if (regime[i] & REG_DEAD) return;                 // ledgered with the BH (declared)
     float4 p = pos[i], m = mom[i];
     double p2 = (double)m.x*m.x + (double)m.y*m.y + (double)m.z*m.z;
     double c2 = (double)C_LIGHT*C_LIGHT;
@@ -561,6 +581,215 @@ __global__ void kDetectorStep(const float4* pos, unsigned* regime, unsigned* rec
     if (n >= REC_THRESH) regime[i] |= 0x40u;
 }
 
+// --- M5 gargantua: BH force, absorption, formation, step (gargantua contract) ---
+__global__ void kBHForce(const float4* pos, unsigned* regime, float4* acc, int N,
+                         const float4* bhpos, const float4* bhmom, const unsigned* bhn){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    if (regime[i] & REG_DEAD) return;
+    int nbh = (int)bhn[0];
+    float4 p = pos[i], a = acc[i];
+    for (int b = 0; b < nbh; b++){
+        float4 bp = bhpos[b];
+        float rs = bhmom[b].w;
+        float dx = bp.x - p.x, dy = bp.y - p.y, dz = bp.z - p.z;
+        float r = sqrtf(dx*dx + dy*dy + dz*dz + 1e-12f);
+        float d = fmaxf(r - rs, 0.05f);
+        float g = G_DIAL*bp.w/(d*d);
+        a.x += g*dx/r; a.y += g*dy/r; a.z += g*dz/r;
+        a.w -= G_DIAL*bp.w/d;                          // Phi_PW into tau/1PN channel
+        if (r < 10.0f*rs) regime[i] |= 0x08u;          // COMPACT
+    }
+    acc[i] = a;
+}
+__global__ void kAbsorb(const float4* pos, const float4* mom, unsigned* regime, int N,
+                        const float4* bhpos, const float4* bhmom, const unsigned* bhn,
+                        unsigned long long* bhacc, unsigned long long* ledger){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+    if (regime[i] & REG_DEAD) return;
+    int nbh = (int)bhn[0];
+    float4 p = pos[i], m = mom[i];
+    for (int b = 0; b < nbh; b++){
+        float4 bp = bhpos[b];
+        float rs = bhmom[b].w;
+        float cap = fmaxf(1.2f*rs, (bp.w < M_FORM) ? 0.75f*CELL : 0.3f);
+        float dx = p.x - bp.x, dy = p.y - bp.y, dz = p.z - bp.z;
+        if (dx*dx + dy*dy + dz*dz < cap*cap){
+            regime[i] |= REG_DEAD;
+            orrery::fixed_atomic_add(&bhacc[b*4 + 0], (double)m.w);
+            orrery::fixed_atomic_add(&bhacc[b*4 + 1], (double)m.x);
+            orrery::fixed_atomic_add(&bhacc[b*4 + 2], (double)m.y);
+            orrery::fixed_atomic_add(&bhacc[b*4 + 3], (double)m.z);
+            orrery::fixed_atomic_add(&ledger[0], (double)m.w);
+            return;
+        }
+    }
+}
+__global__ void kBHDetect(const unsigned long long* fix, int n, unsigned long long* argmax){
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    double m = orrery::fixed_decode((long long)fix[i]);
+    if (m < 1000.0) return;                            // probe floor (argmax candidates only)
+    unsigned long long pack = ((unsigned long long)llrint(m*8.0) << 24) | (unsigned long long)i;
+    atomicMax(argmax, pack);
+}
+__global__ void kBHSpawn(unsigned long long* argmax, float4* bhpos, float4* bhmom,
+                         unsigned* bhn){
+    if (threadIdx.x != 0 || blockIdx.x != 0) return;
+    unsigned long long pk = *argmax;
+    *argmax = 0ull;
+    double m = (double)(pk >> 24)/8.0;
+    if ((unsigned)m > bhn[2]) bhn[2] = (unsigned)m;    // peak-cell-mass probe (declared)
+    if (m < (double)M_FORM) return;
+    unsigned n = bhn[0];
+    if (n >= NBH_MAX) return;
+    int cell = (int)(pk & 0xFFFFFFull);
+    int cx = cell/(PMN*PMN), cy = (cell/PMN) % PMN, cz = cell % PMN;
+    float x = -BOXL*0.5f + (cx + 0.5f)*CELL;
+    float y = -BOXL*0.5f + (cy + 0.5f)*CELL;
+    float z = -BOXL*0.5f + (cz + 0.5f)*CELL;
+    for (unsigned b = 0; b < n; b++){
+        float dx = bhpos[b].x - x, dy = bhpos[b].y - y, dz = bhpos[b].z - z;
+        if (dx*dx + dy*dy + dz*dz < 64.0f) return;     // existing BH owns this core
+    }
+    bhpos[n] = make_float4(x, y, z, 0.0f);             // seed mass 0: formation-tick capture binds the core
+    bhmom[n] = make_float4(0, 0, 0, 0.0f);
+    bhn[0] = n + 1;
+}
+// one-block housekeeping: apply absorption deltas, Hawking cube-step, BH motion
+__global__ void kBHStep(float4* bhpos, float4* bhmom, unsigned long long* bhacc,
+                        unsigned* bhn, unsigned long long* ledger,
+                        const float4* For, const float* phi, float dt, double kHawk,
+                        unsigned long long tick){
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
+    unsigned n = bhn[0];
+    double c2 = (double)C_LIGHT*C_LIGHT;
+    for (unsigned b = 0; b < n; b++){
+        float4 bp = bhpos[b], bm = bhmom[b];
+        // absorption deltas (accumulated during the previous tick)
+        double dm = orrery::fixed_decode((long long)bhacc[b*4 + 0]);
+        bp.w += (float)dm;
+        bm.x += (float)orrery::fixed_decode((long long)bhacc[b*4 + 1]);
+        bm.y += (float)orrery::fixed_decode((long long)bhacc[b*4 + 2]);
+        bm.z += (float)orrery::fixed_decode((long long)bhacc[b*4 + 3]);
+        bhacc[b*4+0] = bhacc[b*4+1] = bhacc[b*4+2] = bhacc[b*4+3] = 0ull;
+        // Hawking: exact cube step (gargantua contract)
+        if (bp.w > 0.0f){
+            double M = bp.w;
+            double m3 = M*M*M - 3.0*kHawk*(double)dt;
+            double Mn = (m3 > 0.0) ? cbrt(m3) : 0.0;
+            if (Mn <= (double)M_POP){
+                orrery::fixed_atomic_add(&ledger[1], M*c2);        // pop: remainder radiates
+                if (ledger[2] == 0ull) ledger[2] = tick;           // first-pop tick (declared)
+                bp.w = -1.0f;                                      // popped sentinel (seeds are 0)
+            } else {
+                orrery::fixed_atomic_add(&ledger[1], (M - Mn)*c2);
+                bp.w = (float)Mn;
+            }
+        }
+        // motion: PM field at BH position + Newtonian BH-BH (declared)
+        if (bp.w > 0.0f){
+            float3 g = make_float3(0, 0, 0);
+            if (For) {
+                float gx = (bp.x + BOXL*0.5f)/CELL, gy = (bp.y + BOXL*0.5f)/CELL, gz = (bp.z + BOXL*0.5f)/CELL;
+                int x0 = (int)floorf(gx), y0 = (int)floorf(gy), z0 = (int)floorf(gz);
+                float fx = gx - x0, fy = gy - y0, fz = gz - z0;
+                for (int dz2 = 0; dz2 < 2; dz2++)
+                    for (int dy2 = 0; dy2 < 2; dy2++)
+                        for (int dx2 = 0; dx2 < 2; dx2++){
+                            float w = (dx2 ? fx : 1.0f-fx)*(dy2 ? fy : 1.0f-fy)*(dz2 ? fz : 1.0f-fz);
+                            float4 f = For[(wrapc(x0+dx2)*PMN + wrapc(y0+dy2))*PMN + wrapc(z0+dz2)];
+                            g.x += w*f.x; g.y += w*f.y; g.z += w*f.z;
+                        }
+            }
+            for (unsigned o = 0; o < n; o++){
+                if (o == b || bhpos[o].w <= 0.0f) continue;
+                float dx = bhpos[o].x - bp.x, dy = bhpos[o].y - bp.y, dz = bhpos[o].z - bp.z;
+                float r2 = dx*dx + dy*dy + dz*dz + 1.0f;
+                float ir = rsqrtf(r2);
+                float gg = G_DIAL*bhpos[o].w*ir*ir*ir;
+                g.x += gg*dx; g.y += gg*dy; g.z += gg*dz;
+            }
+            bm.x += bp.w*g.x*dt; bm.y += bp.w*g.y*dt; bm.z += bp.w*g.z*dt;
+            float im = 1.0f/bp.w;
+            bp.x += bm.x*im*dt; bp.y += bm.y*im*dt; bp.z += bm.z*im*dt;
+        }
+        bm.w = fmaxf(RS_PER_M*bp.w, 0.0f);             // r_s cache
+        bhpos[b] = bp; bhmom[b] = bm;
+    }
+    // compact popped BHs only — mass-0 SEEDS survive to their first meal (D-017 bug fix)
+    unsigned w = 0;
+    for (unsigned b = 0; b < n; b++){
+        if (bhpos[b].w >= 0.0f){
+            if (w != b){ bhpos[w] = bhpos[b]; bhmom[w] = bhmom[b]; }
+            w++;
+        }
+    }
+    for (unsigned b = w; b < n; b++){                  // zero vacated slots (hash hygiene)
+        bhpos[b] = make_float4(0, 0, 0, 0);
+        bhmom[b] = make_float4(0, 0, 0, 0);
+    }
+    bhn[0] = w;
+}
+// screen-space point-lens warp (visuals, non-declared; gargantua contract)
+__global__ void kLens(const float4* src, float4* dst, int W, int H, RP rp){
+    int x = blockIdx.x*blockDim.x + threadIdx.x;
+    int y = blockIdx.y*blockDim.y + threadIdx.y;
+    if (x >= W || y >= H) return;
+    float bestI = 0; int bb = -1;
+    for (int b = 0; b < rp.nLens; b++){
+        float dx = x - rp.lensX[b], dy = y - rp.lensY[b];
+        float r2 = dx*dx + dy*dy + 1e-6f;
+        float I = rp.lensTE2[b]/r2;
+        if (I > bestI){ bestI = I; bb = b; }
+    }
+    if (bb < 0){ dst[y*W + x] = src[y*W + x]; return; }
+    float dx = x - rp.lensX[bb], dy = y - rp.lensY[bb];
+    float r = sqrtf(dx*dx + dy*dy + 1e-6f);
+    if (r < rp.lensShadow[bb]){ dst[y*W + x] = make_float4(0, 0, 0, 1); return; }
+    float s = 1.0f - rp.lensTE2[bb]/(r*r);             // beta = theta(1 - thetaE^2/theta^2)
+    float sx = rp.lensX[bb] + dx*s, sy = rp.lensY[bb] + dy*s;
+    int x0 = min(max((int)sx, 0), W - 2), y0 = min(max((int)sy, 0), H - 2);
+    float fx = fminf(fmaxf(sx - x0, 0.0f), 1.0f), fy = fminf(fmaxf(sy - y0, 0.0f), 1.0f);
+    float4 a = src[y0*W + x0], b2 = src[y0*W + x0 + 1];
+    float4 c = src[(y0+1)*W + x0], d = src[(y0+1)*W + x0 + 1];
+    float4 o;
+    o.x = (a.x*(1-fx) + b2.x*fx)*(1-fy) + (c.x*(1-fx) + d.x*fx)*fy;
+    o.y = (a.y*(1-fx) + b2.y*fx)*(1-fy) + (c.y*(1-fx) + d.y*fx)*fy;
+    o.z = (a.z*(1-fx) + b2.z*fx)*(1-fy) + (c.z*(1-fx) + d.z*fx)*fy;
+    o.w = 1;
+    dst[y*W + x] = o;
+}
+// Hawking glow: BHs splat as blackbody points at their horizon temperature
+__global__ void kSplatBH(const float4* bhpos, int nbh, float4* hdr, RP rp){
+    int b = blockIdx.x*blockDim.x + threadIdx.x;
+    if (b >= nbh) return;
+    float4 p = bhpos[b];
+    if (p.w <= 0.0f) return;
+    float rx = p.x - rp.cpos[0], ry = p.y - rp.cpos[1], rz = p.z - rp.cpos[2];
+    float cz = rx*rp.fwd[0] + ry*rp.fwd[1] + rz*rp.fwd[2];
+    if (cz < 1.0f) return;
+    float cx = rx*rp.rgt[0] + ry*rp.rgt[1] + rz*rp.rgt[2];
+    float cy = rx*rp.upv[0] + ry*rp.upv[1] + rz*rp.upv[2];
+    float px = ((cx/(cz*rp.tf*rp.aspect))*0.5f + 0.5f)*rp.RW - 0.5f;
+    float py = (0.5f - (cy/(cz*rp.tf))*0.5f)*rp.RH - 0.5f;
+    if (px < 2 || py < 2 || px >= rp.RW - 3 || py >= rp.RH - 3) return;
+    float TH = 79577.0f/p.w;                           // horizon temperature (energy units)
+    float Tdisp = clampf(TH*40.0f, 1200.0f, 39000.0f);
+    float flux = 40.0f*(250.0f/p.w)*(250.0f/p.w)*4200.0f/(cz*cz + 25.0f);
+    float bb[3]; blackbody(Tdisp, bb);
+    int x0 = (int)px, y0 = (int)py;
+    for (int oy = -1; oy <= 1; oy++)
+        for (int ox = -1; ox <= 1; ox++){
+            float w = expf(-0.5f*(ox*ox + oy*oy));
+            float4* h = &hdr[(y0+oy)*rp.RW + x0 + ox];
+            atomicAdd(&h->x, bb[0]*flux*w);
+            atomicAdd(&h->y, bb[1]*flux*w);
+            atomicAdd(&h->z, bb[2]*flux*w);
+        }
+}
+
 __global__ void kClear(float4* hdr, int n){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i < n) hdr[i] = make_float4(0, 0, 0, 0);
@@ -570,6 +799,7 @@ __global__ void kSplat(const float4* pos, const unsigned* reg, int N, float4* hd
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
     float4 p = pos[i];
+    if (reg && (reg[i] & REG_DEAD)) return;                    // absorbed: not rendered
     if (reg && (reg[i] & 0x40u)) p.w = fmaxf(p.w, 13000.0f);   // RECORDED: blue-white tint
     float rx = p.x - rp.cpos[0], ry = p.y - rp.cpos[1], rz = p.z - rp.cpos[2];
     float cz = rx*rp.fwd[0] + ry*rp.fwd[1] + rz*rp.fwd[2];
@@ -795,6 +1025,17 @@ static cufftComplex *dSpec = 0;
 static cufftHandle planF, planI;
 static unsigned *dCntX = 0, *dCntV = 0, *dRec = 0;    // M3: entropy histograms + records
 static double gS = 0, gdS = 0;                        // HUD entropy readouts
+// M5 gargantua: BH entities (device-resident, deterministic)
+static float4 *dBHpos = 0, *dBHmom = 0;               // pos.w = mass, mom.w = r_s cache
+static unsigned long long *dBHacc = 0;                // per-BH deltas [b*4+{dm,dpx,dpy,dpz}]
+static unsigned long long *dLedger = 0;               // [0] absorbed mass, [1] radiated energy
+static unsigned long long *dArgmax = 0;               // packed formation argmax
+static unsigned *dBHn = 0;                            // [0] count
+static bool  gBHFormEnabled = false, gBHActive = false;
+static const double gKHawk = 80000.0/(15360.0*3.14159265358979*4.0e-6);  // hbar c^4/(15360 pi G^2)
+static unsigned hBHn = 0;
+static float4 hBHpos[NBH_MAX];
+static float4 *dHdrW = 0;                             // lensed HDR (render res)
 static double gMTot = 1e6;
 struct Met { double KE, PE, E, Px, Py, Pz, Lz; unsigned long long nRel, nCls; };
 static Met  gM0 = {};                                  // meters at t=0
@@ -819,8 +1060,9 @@ static void springStep(Spring& s, float dt){
     s.cur += s.vel*dt;
 }
 static void applyPreset(int i){
-    const float D0[11] = {380.0f, 650.0f, 9.0f, 420.0f, 420.0f, 420.0f,
-                          300.0f, 120.0f, 45.0f, 260.0f, 260.0f};
+    const float D0[14] = {380.0f, 650.0f, 9.0f, 420.0f, 420.0f, 420.0f,
+                          300.0f, 120.0f, 45.0f, 260.0f, 260.0f,
+                          90.0f, 25.0f, 30.0f};
     float d = D0[gScenario];
     if (i == 0){ cAz.tgt = 35;  cEl.tgt = 24; cDist.tgt = logf(d); }
     if (i == 1){ cAz.tgt = 120; cEl.tgt = 10; cDist.tgt = logf(0.45f*d); }
@@ -850,18 +1092,51 @@ static unsigned hHist[256];
 
 static void renderFrame(RP& rp){
     int RW = rp.RW, RH = rp.RH, npx = RW*RH;
+    // BH mirror + screen-space lens parameters (visuals, non-declared)
+    rp.nLens = 0;
+    if (gBHActive){
+        CUDA_CHECK(cudaMemcpy(&hBHn, dBHn, sizeof hBHn, cudaMemcpyDeviceToHost));
+        if (hBHn > 0)
+            CUDA_CHECK(cudaMemcpy(hBHpos, dBHpos, hBHn*sizeof(float4), cudaMemcpyDeviceToHost));
+        float pxpr = rp.RH/(2.0f*rp.tf);              // px per radian (vertical, center)
+        for (unsigned b = 0; b < hBHn && rp.nLens < 4; b++){
+            float4 bp = hBHpos[b];
+            if (bp.w <= 0.0f) continue;
+            float rx = bp.x - rp.cpos[0], ry = bp.y - rp.cpos[1], rz = bp.z - rp.cpos[2];
+            float cz = rx*rp.fwd[0] + ry*rp.fwd[1] + rz*rp.fwd[2];
+            if (cz < 2.0f) continue;
+            float cx = rx*rp.rgt[0] + ry*rp.rgt[1] + rz*rp.rgt[2];
+            float cy = rx*rp.upv[0] + ry*rp.upv[1] + rz*rp.upv[2];
+            float D = sqrtf(rx*rx + ry*ry + rz*rz);
+            float thE = sqrtf(4.0f*G_DIAL*bp.w/((C_LIGHT*C_LIGHT)*D));
+            float tE_px = thE*pxpr;
+            int L = rp.nLens++;
+            rp.lensX[L] = ((cx/(cz*rp.tf*rp.aspect))*0.5f + 0.5f)*rp.RW;
+            rp.lensY[L] = (0.5f - (cy/(cz*rp.tf))*0.5f)*rp.RH;
+            rp.lensTE2[L] = tE_px*tE_px;
+            rp.lensShadow[L] = 2.6f*(RS_PER_M*bp.w)/D*pxpr;
+        }
+    }
     dim3 b1(256), g1((npx + 255)/256);
     kClear<<<g1, b1, 0, prsS>>>(dHdr, npx);
     kSplat<<<(gN + 255)/256, b1, 0, prsS>>>(dPos[gPub], dRegime, gN, dHdr, rp);
+    if (gBHActive && hBHn > 0)
+        kSplatBH<<<1, NBH_MAX, 0, prsS>>>(dBHpos, (int)hBHn, dHdr, rp);
+    const float4* rsrc = dHdr;
+    if (rp.nLens > 0){
+        dim3 b2l(16, 16), g2l((RW + 15)/16, (RH + 15)/16);
+        kLens<<<g2l, b2l, 0, prsS>>>(dHdr, dHdrW, RW, RH, rp);
+        rsrc = dHdrW;
+    }
     // auto-exposure histogram
     CUDA_CHECK(cudaMemsetAsync(dHist, 0, 256*sizeof(unsigned), prsS));
-    kHist<<<g1, b1, 0, prsS>>>(dHdr, npx, dHist);
+    kHist<<<g1, b1, 0, prsS>>>(rsrc, npx, dHist);
     CUDA_CHECK(cudaMemcpyAsync(hHist, dHist, 256*sizeof(unsigned),
                                cudaMemcpyDeviceToHost, prsS));
     // bloom mip chain (threshold-free)
     if (gBloomOn){
         dim3 b2(16, 16);
-        const float4* src = dHdr; int sw = RW, sh = RH;
+        const float4* src = rsrc; int sw = RW, sh = RH;
         for (int m = 1; m <= 6; m++){
             dim3 g2((mipW[m] + 15)/16, (mipH[m] + 15)/16);
             kDown13<<<g2, b2, 0, prsS>>>(src, sw, sh, dMip[m], mipW[m], mipH[m]);
@@ -892,7 +1167,7 @@ static void renderFrame(RP& rp){
     gExposure = expo * exp2f(gEvOffset);
     rp.exposure = gExposure;
     dim3 b3(16, 16), g3((gOW + 15)/16, (gOH + 15)/16);
-    kComposite<<<g3, b3, 0, prsS>>>(dHdr, dMip[1], mipW[1], mipH[1], dOut, rp);
+    kComposite<<<g3, b3, 0, prsS>>>(rsrc, dMip[1], mipW[1], mipH[1], dOut, rp);
 }
 
 static void drawHud(const RP& rp){
@@ -912,15 +1187,24 @@ static void drawHud(const RP& rp){
     emit(16, 50, line, 0);
     if (gMode) emit(16, 68, "PHYSICAL: L=T4 SAT=1.0 NO CLIP", 0);
     else       emit(16, 68, "CINEMATIC: L=T2.2 SAT=1.2 STRETCH", 0);
-    static const char* SC_HUD[11] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD",
+    static const char* SC_HUD[14] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD",
                                      "MERGER", "ECHO", "RATCHET", "DETECTOR",
-                                     "KEPREL", "CLOCKS", "PHOTONS"};
+                                     "KEPREL", "CLOCKS", "PHOTONS",
+                                     "COLLAPSE", "ISCO", "HAWKING"};
     snprintf(line, sizeof line, "%s %s  DE %+.1E  DP %.1E", SC_HUD[gScenario],
              gSolver == SOLV_PM ? "PM" : (gSolver == SOLV_TINY ? "TINY" :
              (gSolver == SOLV_NONE ? "NONE" : "DIRECT")), gDE, gDP);
     emit(16, 86, line, 0);
     if (gScenario == SC_MERGER || gScenario == SC_ECHO){
         snprintf(line, sizeof line, "S %.3F  DS/DT %+.1E", gS, gdS);
+        emit(16, 104, line, 0);
+    }
+    if (gBHActive){
+        if (hBHn > 0)
+            snprintf(line, sizeof line, "BH N=%u  M=%.3E  TH=%.2F", hBHn,
+                     (double)hBHpos[0].w, hBHpos[0].w > 0 ? 79577.0/hBHpos[0].w : 0.0);
+        else
+            snprintf(line, sizeof line, "BH N=0 (EVAPORATED)");
         emit(16, 104, line, 0);
     }
     // render panel (amber, right)
@@ -967,12 +1251,18 @@ static double entropyNow(){
 
 // invariant: dAcc = a(dPos[gPub]) after every full tick and after init
 static void forcePass(){
-    if (gSolver == SOLV_NONE) return;                 // pure drift (dAcc stays zero)
     dim3 b(256);
+    if (gSolver == SOLV_NONE){
+        if (!gBHActive) return;                       // pure drift (dAcc stays zero)
+        CUDA_CHECK(cudaMemsetAsync(dAcc, 0, (size_t)gN*sizeof(float4), simS));
+        kBHForce<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dRegime, dAcc, gN,
+                                                 dBHpos, dBHmom, dBHn);
+        return;
+    }
     if (gSolver == SOLV_PM){
         int nc = PMN*PMN*PMN, ns = PMN*PMN*PMNZC;
         kZeroFix<<<(nc + 255)/256, b, 0, simS>>>(dFix, nc);
-        kDeposit<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dMom, gN, dFix);
+        kDeposit<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dMom, dRegime, gN, dFix);
         kFixToReal<<<(nc + 255)/256, b, 0, simS>>>(dFix, dReal, nc);
         CUFFT_CHECK(cufftExecR2C(planF, dReal, dSpec));
         kGreen<<<(ns + 255)/256, b, 0, simS>>>(dSpec);
@@ -982,6 +1272,9 @@ static void forcePass(){
     } else if (gSolver == SOLV_DIRECT){
         kDirect<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dMom, dAcc, gN);
     }
+    if (gBHActive)
+        kBHForce<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dRegime, dAcc, gN,
+                                                 dBHpos, dBHmom, dBHn);
 }
 
 static void runTicks(int nt){
@@ -995,13 +1288,25 @@ static void runTicks(int nt){
         dim3 b(256), g((gN + 255)/256);
         const float* phiP = (gSolver == SOLV_PM) ? dReal : nullptr;
         for (int t = 0; t < nt; t++){
-            kKick<<<g, b, 0, simS>>>(dMom, dAcc, gN, hdt);
+            kKick<<<g, b, 0, simS>>>(dMom, dAcc, dRegime, gN, hdt);
             int src = gPub, dst = 1 - gPub;
             kDriftK<<<g, b, 0, simS>>>(dPos[src], dPos[dst], dPosErr, dMom, dTau,
                                        dRegime, phiP, gN, DT, invc2);
             gPub = dst;
             forcePass();
-            kKick<<<g, b, 0, simS>>>(dMom, dAcc, gN, hdt);
+            kKick<<<g, b, 0, simS>>>(dMom, dAcc, dRegime, gN, hdt);
+            if (gBHActive){
+                kAbsorb<<<g, b, 0, simS>>>(dPos[gPub], dMom, dRegime, gN,
+                                           dBHpos, dBHmom, dBHn, dBHacc, dLedger);
+                if (gBHFormEnabled && (gTick % 24) == 0){
+                    int nc = PMN*PMN*PMN;
+                    kBHDetect<<<(nc + 255)/256, b, 0, simS>>>(dFix, nc, dArgmax);
+                    kBHSpawn<<<1, 1, 0, simS>>>(dArgmax, dBHpos, dBHmom, dBHn);
+                }
+                kBHStep<<<1, 1, 0, simS>>>(dBHpos, dBHmom, dBHacc, dBHn, dLedger,
+                        gSolver == SOLV_PM ? dFor : nullptr,
+                        gSolver == SOLV_PM ? dReal : nullptr, DT, gKHawk, gTick);
+            }
             if (gScenario == SC_DETECTOR)
                 kDetectorStep<<<g, b, 0, simS>>>(dPos[gPub], dRegime, dRec, gN, gTick, gSeed);
             if (gScenario == SC_RATCHET)
@@ -1024,10 +1329,13 @@ static Met metersNow(){
     Met M = {};
     if (gSolver == SOLV_TINY || gN <= 4096){
         std::vector<float4> hp(gN), hm(gN);
+        std::vector<unsigned> hgr(gN);
         CUDA_CHECK(cudaStreamSynchronize(simS));
         CUDA_CHECK(cudaMemcpy(hp.data(), dPos[gPub], gN*sizeof(float4), cudaMemcpyDeviceToHost));
         CUDA_CHECK(cudaMemcpy(hm.data(), dMom, gN*sizeof(float4), cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(hgr.data(), dRegime, gN*sizeof(unsigned), cudaMemcpyDeviceToHost));
         for (int i = 0; i < gN; i++){
+            if (hgr[i] & REG_DEAD) continue;
             double m = hm[i].w;
             double p2 = (double)hm[i].x*hm[i].x + (double)hm[i].y*hm[i].y + (double)hm[i].z*hm[i].z;
             double c2 = (double)C_LIGHT*C_LIGHT;
@@ -1040,13 +1348,14 @@ static Met metersNow(){
                 if (v2 > REL_V2) M.nRel++; else M.nCls++;
             }
             for (int j = i + 1; j < gN; j++){
+                if (hgr[j] & REG_DEAD) continue;
                 double dx = hp[j].x - hp[i].x, dy = hp[j].y - hp[i].y, dz = hp[j].z - hp[i].z;
                 M.PE -= (double)G_DIAL*(double)hm[i].w*hm[j].w/sqrt(dx*dx + dy*dy + dz*dz + 1e-6);
             }
         }
     } else {
         CUDA_CHECK(cudaMemsetAsync(dMet, 0, 8*sizeof(unsigned long long), simS));
-        kMeters<<<(gN + 255)/256, 256, 0, simS>>>(dPos[gPub], dMom,
+        kMeters<<<(gN + 255)/256, 256, 0, simS>>>(dPos[gPub], dMom, dRegime,
                 gSolver == SOLV_PM ? dReal : nullptr, gN, dMet);
         unsigned long long h[8];
         CUDA_CHECK(cudaStreamSynchronize(simS));
@@ -1129,6 +1438,20 @@ static void allocAll(){
     CUDA_CHECK(cudaMalloc(&dCntV, 32768*sizeof(unsigned)));
     CUDA_CHECK(cudaMalloc(&dRec,  (size_t)NRECS*sizeof(unsigned)));
     CUDA_CHECK(cudaMemset(dRec, 0, (size_t)NRECS*sizeof(unsigned)));
+    // M5 gargantua: BH state + lensed HDR
+    CUDA_CHECK(cudaMalloc(&dBHpos, NBH_MAX*sizeof(float4)));
+    CUDA_CHECK(cudaMalloc(&dBHmom, NBH_MAX*sizeof(float4)));
+    CUDA_CHECK(cudaMemset(dBHpos, 0, NBH_MAX*sizeof(float4)));
+    CUDA_CHECK(cudaMemset(dBHmom, 0, NBH_MAX*sizeof(float4)));
+    CUDA_CHECK(cudaMalloc(&dBHacc, NBH_MAX*4*sizeof(unsigned long long)));
+    CUDA_CHECK(cudaMemset(dBHacc, 0, NBH_MAX*4*sizeof(unsigned long long)));
+    CUDA_CHECK(cudaMalloc(&dLedger, 4*sizeof(unsigned long long)));
+    CUDA_CHECK(cudaMemset(dLedger, 0, 4*sizeof(unsigned long long)));
+    CUDA_CHECK(cudaMalloc(&dArgmax, sizeof(unsigned long long)));
+    CUDA_CHECK(cudaMemset(dArgmax, 0, sizeof(unsigned long long)));
+    CUDA_CHECK(cudaMalloc(&dBHn, 4*sizeof(unsigned)));
+    CUDA_CHECK(cudaMemset(dBHn, 0, 4*sizeof(unsigned)));
+    CUDA_CHECK(cudaMalloc(&dHdrW, (size_t)RW*RH*sizeof(float4)));
     CUFFT_CHECK(cufftPlan3d(&planF, PMN, PMN, PMN, CUFFT_R2C));
     CUFFT_CHECK(cufftPlan3d(&planI, PMN, PMN, PMN, CUFFT_C2R));
     CUFFT_CHECK(cufftSetStream(planF, simS));
@@ -1143,7 +1466,7 @@ static void allocAll(){
         break;
     case SC_CLOUD:
         gMTot = (double)gN * 1.0;
-        kInitCloud<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed);
+        kInitCloud<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed, 100.0f, 0.35f);
         gSolver = SOLV_PM;
         break;
     case SC_KEPLER: {
@@ -1185,7 +1508,7 @@ static void allocAll(){
         break;
     case SC_RATCHET:
         gN = 1000; gMTot = 1000.0;
-        kInitCloud<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed);
+        kInitCloud<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed, 100.0f, 0.35f);
         kRatchetInitRecs<<<(NRECS + 255)/256, 256>>>(dRec, NRECS);
         gSolver = SOLV_NONE;
         break;
@@ -1243,6 +1566,64 @@ static void allocAll(){
         CUDA_CHECK(cudaMemcpy(dTau, ht.data(), 65*sizeof(float), cudaMemcpyHostToDevice));
         CUDA_CHECK(cudaMemcpy(dRegime, hr.data(), 65*sizeof(unsigned), cudaMemcpyHostToDevice));
         gSolver = SOLV_DIRECT;
+    } break;
+    case SC_COLLAPSE:                                 // gargantua contract: unscripted formation
+        gMTot = (double)gN * 1.0;
+        kInitCloud<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed, 40.0f, 0.15f);
+        gSolver = SOLV_PM; gBHActive = true; gBHFormEnabled = true;
+        break;
+    case SC_ISCO: {
+        gN = 8; gMTot = 1e5 + 8;
+        const float rr[8] = {2.4f, 2.55f, 2.7f, 4.5f, 5.0f, 5.5f, 6.5f, 8.0f};
+        float4 hp[8], hm[8]; float ht[8] = {0};
+        unsigned hr8[8];
+        double GM = (double)G_DIAL*1e5, rs = 1.0, c2 = (double)C_LIGHT*C_LIGHT;
+        for (int q = 0; q < 8; q++){
+            double r = rr[q], d = r - rs;
+            double gacc = GM/(d*d);
+            double v2 = gacc*r;                       // SR-circular: v^2 = g r / gamma, iterate
+            for (int it = 0; it < 40; it++) v2 = gacc*r*sqrt(1.0 - v2/c2);
+            double u = sqrt(v2)/sqrt(1.0 - v2/c2);
+            double ph = 2.0*3.14159265358979*q/8.0;
+            hp[q] = make_float4((float)(r*cos(ph)), (float)(r*sin(ph)), 0, 8000.0f + 500.0f*q);
+            // -1e-3 u_phi inward kick: unstable circulars must roll off (nexus N4 idiom)
+            hm[q] = make_float4((float)(-u*sin(ph) - 1e-3*u*cos(ph)),
+                                (float)( u*cos(ph) - 1e-3*u*sin(ph)), 0, 1.0f);
+            ht[q] = 0; hr8[q] = 0x04u;
+        }
+        CUDA_CHECK(cudaMemcpy(dPos[0], hp, sizeof hp, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dMom, hm, sizeof hm, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dTau, ht, sizeof ht, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dRegime, hr8, sizeof hr8, cudaMemcpyHostToDevice));
+        float4 bp0 = make_float4(0, 0, 0, 1e5f), bm0 = make_float4(0, 0, 0, RS_PER_M*1e5f);
+        CUDA_CHECK(cudaMemcpy(dBHpos, &bp0, sizeof bp0, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dBHmom, &bm0, sizeof bm0, cudaMemcpyHostToDevice));
+        unsigned one = 1;
+        CUDA_CHECK(cudaMemcpy(dBHn, &one, sizeof one, cudaMemcpyHostToDevice));
+        gSolver = SOLV_NONE; gBHActive = true;
+    } break;
+    case SC_HAWKING: {
+        gN = 32; gMTot = 250.0 + 32.0;
+        float4 hp[32], hm[32]; float ht[32] = {0};
+        unsigned hr32[32];
+        double GM = (double)G_DIAL*250.0;
+        double v = sqrt(GM/5.0);
+        for (int q = 0; q < 32; q++){
+            double ph = 2.0*3.14159265358979*q/32.0;
+            hp[q] = make_float4((float)(5.0*cos(ph)), (float)(5.0*sin(ph)), 0, 4200.0f + 90.0f*q);
+            hm[q] = make_float4((float)(-v*sin(ph)), (float)(v*cos(ph)), 0, 1.0f);
+            hr32[q] = 0x02u;
+        }
+        CUDA_CHECK(cudaMemcpy(dPos[0], hp, sizeof hp, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dMom, hm, sizeof hm, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dTau, ht, sizeof ht, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dRegime, hr32, sizeof hr32, cudaMemcpyHostToDevice));
+        float4 bp0 = make_float4(0, 0, 0, 250.0f), bm0 = make_float4(0, 0, 0, RS_PER_M*250.0f);
+        CUDA_CHECK(cudaMemcpy(dBHpos, &bp0, sizeof bp0, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dBHmom, &bm0, sizeof bm0, cudaMemcpyHostToDevice));
+        unsigned one = 1;
+        CUDA_CHECK(cudaMemcpy(dBHn, &one, sizeof one, cudaMemcpyHostToDevice));
+        gSolver = SOLV_NONE; gBHActive = true;
     } break;
     }
     CUDA_CHECK(cudaMemcpy(dPos[1], dPos[0], (size_t)gN*sizeof(float4),
@@ -1390,6 +1771,9 @@ int main(int argc, char** argv){
             else if (s == "keprel")    gScenario = SC_KEPREL;
             else if (s == "clocks")    gScenario = SC_CLOCKS;
             else if (s == "photons")   gScenario = SC_PHOTONS;
+            else if (s == "collapse")  gScenario = SC_COLLAPSE;
+            else if (s == "isco")      gScenario = SC_ISCO;
+            else if (s == "hawking")   gScenario = SC_HAWKING;
             else { fprintf(stderr, "error: unknown scenario\n"); return 2; }
         }
         else { fprintf(stderr, "usage: tinyuniverse [--scenario galaxy|kepler|threebody|cloud] "
@@ -1414,13 +1798,13 @@ int main(int argc, char** argv){
 
     if (jsonMode || goldenMode){                      // headless instrument face (newton contract)
         if (goldenMode){                              // frozen golden params (seed forced pre-init)
-            const long long GS[11] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
-                                      320000, 24000, 3000};
+            const long long GS[14] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
+                                      320000, 24000, 3000, 12000, 6000, 4000};
             runSteps = GS[gScenario];
         }
         if (runSteps <= 0){
-            const long long GS[11] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
-                                      320000, 24000, 3000};
+            const long long GS[14] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
+                                      320000, 24000, 3000, 12000, 6000, 4000};
             runSteps = GS[gScenario];
         }
         long long done = 0, nextPct = 10;
@@ -1484,6 +1868,19 @@ int main(int argc, char** argv){
         CUDA_CHECK(cudaMemcpy(w, dMom,       (size_t)gN*16, cudaMemcpyDeviceToHost)); w += (size_t)gN*16;
         CUDA_CHECK(cudaMemcpy(w, dTau,       (size_t)gN*4,  cudaMemcpyDeviceToHost)); w += (size_t)gN*4;
         CUDA_CHECK(cudaMemcpy(w, dRegime,    (size_t)gN*4,  cudaMemcpyDeviceToHost));
+        unsigned nbFinal = 0;
+        float4 bhP[NBH_MAX] = {}, bhM[NBH_MAX] = {};
+        unsigned long long lg[4] = {};
+        if (gBHActive){                               // BH block joins the declared state
+            CUDA_CHECK(cudaMemcpy(&nbFinal, dBHn, 4, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(bhP, dBHpos, sizeof bhP, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(bhM, dBHmom, sizeof bhM, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(lg, dLedger, sizeof lg, cudaMemcpyDeviceToHost));
+            bytes.append((const char*)&nbFinal, 4);
+            bytes.append((const char*)bhP, sizeof bhP);
+            bytes.append((const char*)bhM, sizeof bhM);
+            bytes.append((const char*)lg, sizeof lg);
+        }
         std::string shash = orrery::blake2b_hex(bytes, 32);
 
         double pnorm = sqrt(2.0*gMTot*(gM0.KE > 1e-12 ? gM0.KE : fabs(gM0.E) + 1e-12));
@@ -1506,6 +1903,48 @@ int main(int argc, char** argv){
         using namespace orrery;
         auto B = [](bool b){ return std::string(b ? "true" : "false"); };
         switch (gScenario){
+        case SC_COLLAPSE: {
+            std::vector<unsigned> hg(gN);
+            CUDA_CHECK(cudaMemcpy(hg.data(), dRegime, (size_t)gN*4, cudaMemcpyDeviceToHost));
+            long long nDead = 0;
+            for (int q = 0; q < gN; q++) if (hg[q] & REG_DEAD) nDead++;
+            double mBH = (nbFinal > 0) ? (double)bhP[0].w : 0.0;
+            double absorbed = orrery::fixed_decode((long long)lg[0]);
+            double ledgErr = fabs(absorbed - (double)nDead);
+            pass = (nbFinal >= 1) && (mBH >= 1.5e5) && (ledgErr < 1e-6);
+            gates = "\"formed_ge_1\":" + B(nbFinal >= 1) + ",\"m_bh_ge_1.5e5\":" + B(mBH >= 1.5e5)
+                  + ",\"ledger_exact\":" + B(ledgErr < 1e-6);
+            unsigned pk4[4];
+            CUDA_CHECK(cudaMemcpy(pk4, dBHn, sizeof pk4, cudaMemcpyDeviceToHost));
+            resExtra = ",\"n_bh\":" + fmti((long long)nbFinal) + ",\"m_bh\":" + fmt6(mBH)
+                     + ",\"n_absorbed\":" + fmti(nDead) + ",\"absorbed_mass\":" + fmt6(absorbed)
+                     + ",\"peak_cell_mass\":" + fmti((long long)pk4[2]);
+        } break;
+        case SC_ISCO: {
+            unsigned hg8[8];
+            CUDA_CHECK(cudaMemcpy(hg8, dRegime, sizeof hg8, cudaMemcpyDeviceToHost));
+            int plunged = 0, survived = 0;
+            for (int q = 0; q < 3; q++) if (hg8[q] & REG_DEAD) plunged++;
+            for (int q = 3; q < 8; q++) if (!(hg8[q] & REG_DEAD)) survived++;
+            pass = (plunged == 3) && (survived == 5);
+            gates = "\"inner3_plunged\":" + B(plunged == 3) + ",\"outer5_alive\":" + B(survived == 5);
+            resExtra = ",\"n_plunged\":" + fmti(plunged) + ",\"n_survived\":" + fmti(survived)
+                     + ",\"m_bh\":" + fmt6((double)bhP[0].w);
+        } break;
+        case SC_HAWKING: {
+            double radiated = orrery::fixed_decode((long long)lg[1]);
+            double E0 = 250.0*(double)C_LIGHT*C_LIGHT;
+            double ledgRel = fabs(radiated - E0)/E0;
+            long long popTick = (long long)lg[2];
+            double nExact = (250.0*250.0*250.0 - (double)M_POP*M_POP*M_POP)/(3.0*gKHawk*(1.0/240.0));
+            long long popExp = (long long)ceil(nExact - 1e-9) - 1;   // tick index of the popping step
+            bool popOk = fabs((double)(popTick - popExp)) <= 0.005*nExact;
+            pass = (nbFinal == 0) && popOk && (ledgRel < 1e-6);   // fp32 BH mass round-trip (D-017)
+            gates = "\"evaporated\":" + B(nbFinal == 0) + ",\"pop_tick_0.5pc\":" + B(popOk)
+                  + ",\"ledger_lt_1e-6\":" + B(ledgRel < 1e-6);
+            resExtra = ",\"pop_tick\":" + fmti(popTick) + ",\"pop_exp\":" + fmti(popExp)
+                     + ",\"radiated\":" + fmt6(radiated) + ",\"e0c2\":" + fmt6(E0);
+        } break;
         case SC_KEPREL: {
             // exact Sommerfeld precession for relativistic Kepler (dp/dt = -mu m r_hat/r^2):
             // per orbit 2*pi*(1/Lambda - 1), Lambda = sqrt(1 - (mu/(c*l))^2), l = |r x u| at init

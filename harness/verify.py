@@ -24,6 +24,9 @@ GOLDENS = [
     ("keprel",    [r"build\tinyuniverse.exe", "--scenario", "keprel",    "--golden"]),
     ("clocks",    [r"build\tinyuniverse.exe", "--scenario", "clocks",    "--golden"]),
     ("photons",   [r"build\tinyuniverse.exe", "--scenario", "photons",   "--golden"]),
+    ("collapse",  [r"build\tinyuniverse.exe", "--scenario", "collapse",  "--golden"]),
+    ("isco",      [r"build\tinyuniverse.exe", "--scenario", "isco",      "--golden"]),
+    ("hawking",   [r"build\tinyuniverse.exe", "--scenario", "hawking",   "--golden"]),
 ]
 
 def main():
