@@ -45,16 +45,19 @@
 
 // --- M2 newton: dials + PM constants (contracts/newton.contract.md) ---
 #define G_DIAL   2.0e-3f
+#define C_LIGHT  20.0f
 #define PMN      128
 #define PMNZC    (PMN/2 + 1)
 #define CELL     4.0f
 #define BOXL     512.0f
 #define REL_V2   1.0f            // (0.05c)^2 = 1 su^2/s^2 — regime threshold
 enum Scenario { SC_GALAXY = 0, SC_KEPLER, SC_THREEBODY, SC_CLOUD,
-                SC_MERGER, SC_ECHO, SC_RATCHET, SC_DETECTOR };
+                SC_MERGER, SC_ECHO, SC_RATCHET, SC_DETECTOR,
+                SC_KEPREL, SC_CLOCKS, SC_PHOTONS };
 enum Solver   { SOLV_PM = 0, SOLV_DIRECT, SOLV_TINY, SOLV_NONE };
-static const char* SC_NAME[8] = {"galaxy", "kepler", "threebody", "cloud",
-                                 "merger", "echo", "ratchet", "detector"};
+static const char* SC_NAME[11] = {"galaxy", "kepler", "threebody", "cloud",
+                                  "merger", "echo", "ratchet", "detector",
+                                  "keprel", "clocks", "photons"};
 // arrow contract: ratchet constants (N6/ORRERY), record thresholds
 #define RATCHET_PDOWN 0.4166666666666667   // p/(p+(1-p)rho), p=0.3 rho=0.6
 #define REC_THRESH 16u
@@ -216,31 +219,55 @@ __global__ void kInitCloud(float4* pos, float4* mom, float* tau, unsigned* regim
     tau[i] = 0.0f; regime[i] = 0x02u;
 }
 
-// --- KDK pieces (frame contract: ping-pong publish; Kahan drift compensation) ---
+__device__ float phiAt(const float* phi, float4 p);   // defined with the PM pipeline below
+
+// --- KDK pieces, relativistic (einstein contract): p = gamma*m*v state,
+//     v = p/sqrt(m^2 + |p|^2/c^2) (cancellation-free), photons v = c*p_hat ---
+__device__ __forceinline__ float3 velOf(float4 m){
+    float p2 = m.x*m.x + m.y*m.y + m.z*m.z;
+    if (m.w > 0.0f){
+        float ir = rsqrtf(m.w*m.w + p2/(C_LIGHT*C_LIGHT));
+        return make_float3(m.x*ir, m.y*ir, m.z*ir);
+    }
+    float ir = C_LIGHT*rsqrtf(fmaxf(p2, 1e-30f));
+    return make_float3(m.x*ir, m.y*ir, m.z*ir);
+}
 __global__ void kKick(float4* mom, const float4* acc, int N, float hdt){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
-    float4 m = mom[i], a = acc[i];
-    m.x += m.w*a.x*hdt; m.y += m.w*a.y*hdt; m.z += m.w*a.z*hdt;
+    float4 m = mom[i], a = acc[i];                    // a.xyz = g, a.w = Phi
+    const float ic2 = 1.0f/(C_LIGHT*C_LIGHT);
+    if (m.w > 0.0f){
+        // dp = m*g*dt (D-016: the 1PN field term was withdrawn after measurement
+        // contradicted the 7-pi superposition claim; strong-field precession
+        // returns with M5's pseudo-potential oracles. Q-006 holds the derivation.)
+        (void)ic2;
+        m.x += m.w*a.x*hdt; m.y += m.w*a.y*hdt; m.z += m.w*a.z*hdt;
+    } else {
+        float pm = sqrtf(m.x*m.x + m.y*m.y + m.z*m.z);
+        float f = 2.0f*pm/C_LIGHT*hdt;                // weak-field photon bending (factor 2)
+        m.x += f*a.x; m.y += f*a.y; m.z += f*a.z;
+    }
     mom[i] = m;
 }
 __global__ void kDriftK(const float4* pin, float4* pout, float4* perr,
                         const float4* mom, float* tau, unsigned* regime,
-                        int N, float dt, float inv2c2){
+                        const float* phi, int N, float dt, float invc2){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
     float4 p = pin[i], m = mom[i], e = perr[i];
-    float im = 1.0f/m.w;
-    float3 d = make_float3(m.x*im*dt, m.y*im*dt, m.z*im*dt);
+    float3 v = velOf(m);
+    float3 d = make_float3(v.x*dt, v.y*dt, v.z*dt);
     float y, t;
     y = d.x - e.x; t = p.x + y; e.x = (t - p.x) - y; p.x = t;
     y = d.y - e.y; t = p.y + y; e.y = (t - p.y) - y; p.y = t;
     y = d.z - e.z; t = p.z + y; e.z = (t - p.z) - y; p.z = t;
     pout[i] = p; perr[i] = e;
-    float v2 = (m.x*m.x + m.y*m.y + m.z*m.z)*im*im;
-    tau[i] += dt * (1.0f - v2*inv2c2);
-    // speed class recomputed; record latches (0x40 RECORDED, 0x80 inscribed) preserved
-    regime[i] = (regime[i] & 0xC0u) | ((v2 > REL_V2) ? 0x04u : 0x02u);
+    float v2 = v.x*v.x + v.y*v.y + v.z*v.z;
+    float ph = phi ? phiAt(phi, p) : 0.0f;            // tick-lagged Phi (declared)
+    tau[i] += dt * sqrtf(fmaxf(1.0f + (2.0f*ph - v2)*invc2, 0.0f));   // photons: 0 — light does not age
+    unsigned sp = (m.w == 0.0f) ? (0x20u | 0x04u) : ((v2 > REL_V2) ? 0x04u : 0x02u);
+    regime[i] = (regime[i] & 0xC0u) | sp;
 }
 
 // --- PM pipeline: fixed-point CIC deposit -> cuFFT -> Green -> force grid -> gather ---
@@ -297,7 +324,8 @@ __global__ void kForceGrid(const float* phi, float4* F){
     #undef PHI
     F[i] = make_float4(fx, fy, fz, 0.0f);
 }
-__global__ void kGather(const float4* pos, const float4* F, float4* acc, int N){
+__global__ void kGather(const float4* pos, const float4* F, const float* phi,
+                        float4* acc, int N){
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
     float4 p = pos[i];
@@ -305,14 +333,17 @@ __global__ void kGather(const float4* pos, const float4* F, float4* acc, int N){
     int x0 = (int)floorf(gx), y0 = (int)floorf(gy), z0 = (int)floorf(gz);
     float fx = gx - x0, fy = gy - y0, fz = gz - z0;
     float3 a = make_float3(0, 0, 0);
+    float pw = 0;
     for (int dz = 0; dz < 2; dz++)
         for (int dy = 0; dy < 2; dy++)
             for (int dx = 0; dx < 2; dx++){
                 float w = (dx ? fx : 1.0f - fx)*(dy ? fy : 1.0f - fy)*(dz ? fz : 1.0f - fz);
-                float4 f = F[(wrapc(x0 + dx)*PMN + wrapc(y0 + dy))*PMN + wrapc(z0 + dz)];
+                int c = (wrapc(x0 + dx)*PMN + wrapc(y0 + dy))*PMN + wrapc(z0 + dz);
+                float4 f = F[c];
                 a.x += w*f.x; a.y += w*f.y; a.z += w*f.z;
+                pw += w*phi[c];
             }
-    acc[i] = make_float4(a.x, a.y, a.z, 0.0f);
+    acc[i] = make_float4(a.x, a.y, a.z, pw);
 }
 __device__ float phiAt(const float* phi, float4 p){
     float gx = (p.x + BOXL*0.5f)/CELL, gy = (p.y + BOXL*0.5f)/CELL, gz = (p.z + BOXL*0.5f)/CELL;
@@ -334,6 +365,7 @@ __global__ void kDirect(const float4* pos, const float4* mom, float4* acc, int N
     if (i >= N) return;
     float4 pi = pos[i];
     float3 a = make_float3(0, 0, 0);
+    float pw = 0;
     for (int j = 0; j < N; j++){
         if (j == i) continue;
         float4 pj = pos[j];
@@ -342,15 +374,17 @@ __global__ void kDirect(const float4* pos, const float4* mom, float4* acc, int N
         float ir = rsqrtf(r2);
         float f = G_DIAL*mom[j].w*ir*ir*ir;
         a.x += f*dx; a.y += f*dy; a.z += f*dz;
+        pw -= G_DIAL*mom[j].w*ir;
     }
-    acc[i] = make_float4(a.x, a.y, a.z, 0.0f);
+    acc[i] = make_float4(a.x, a.y, a.z, pw);
 }
 
 // --- tiny solver (N <= 32): one block, many ticks per launch, fp64 internal ---
 // (D-014: tiny scenarios are the sim's precision references; declared state
 //  round-trips through the fp32 frame-contract buffers only at batch edges)
-__device__ double3 tinyAcc(const double3* sp, const double* sm, int N, int i){
+__device__ double3 tinyAcc(const double3* sp, const double* sm, int N, int i, double* phiOut){
     double3 a = make_double3(0, 0, 0);
+    double ph = 0;
     for (int j = 0; j < N; j++){
         if (j == i) continue;
         double dx = sp[j].x - sp[i].x, dy = sp[j].y - sp[i].y, dz = sp[j].z - sp[i].z;
@@ -358,41 +392,59 @@ __device__ double3 tinyAcc(const double3* sp, const double* sm, int N, int i){
         double ir = rsqrt(r2);
         double f = (double)G_DIAL*sm[j]*ir*ir*ir;
         a.x += f*dx; a.y += f*dy; a.z += f*dz;
+        ph -= (double)G_DIAL*sm[j]*ir;
     }
+    *phiOut = ph;
     return a;
 }
+// 1PN field term + SR inertia in u = p/m form (einstein contract, fp64)
+__device__ double3 tinyVel(double3 u, double c2){
+    double ig = rsqrt(1.0 + (u.x*u.x + u.y*u.y + u.z*u.z)/c2);
+    return make_double3(u.x*ig, u.y*ig, u.z*ig);
+}
+__device__ double3 tinyForce(double3 g, double ph, double3 v, double c2){
+    double v2 = v.x*v.x + v.y*v.y + v.z*v.z;
+    double gv = g.x*v.x + g.y*v.y + g.z*v.z;
+    double c1 = 1.0 + (v2 + 4.0*ph)/c2;
+    return make_double3(c1*g.x - 4.0/c2*gv*v.x,
+                        c1*g.y - 4.0/c2*gv*v.y,
+                        c1*g.z - 4.0/c2*gv*v.z);
+}
 __global__ void kTiny(const float4* pin, float4* pout, float4* mom, float* tau,
-                      unsigned* regime, int N, int steps, float dtf, float inv2c2f){
-    __shared__ double3 sp[32], sv[32], sa[32];
-    __shared__ double  sm[32];
+                      unsigned* regime, int N, int steps, float dtf, float invc2f){
+    __shared__ double3 sp[32], su[32], sa[32];
+    __shared__ double  sm[32], sph[32];
     int i = threadIdx.x;
     if (i >= N) return;
-    double dt = (double)dtf, inv2c2 = (double)inv2c2f;
+    double dt = (double)dtf, c2 = 1.0/(double)invc2f;
     float4 P = pin[i], M = mom[i];
     sp[i] = make_double3(P.x, P.y, P.z);
     sm[i] = M.w;
-    sv[i] = make_double3(M.x/(double)M.w, M.y/(double)M.w, M.z/(double)M.w);
+    su[i] = make_double3(M.x/(double)M.w, M.y/(double)M.w, M.z/(double)M.w);  // u = p/m
     double tu = tau[i];
     __syncthreads();
-    sa[i] = tinyAcc(sp, sm, N, i);
+    sa[i] = tinyAcc(sp, sm, N, i, &sph[i]);
     __syncthreads();
     double hdt = 0.5*dt;
     for (int s = 0; s < steps; s++){
-        sv[i].x += sa[i].x*hdt; sv[i].y += sa[i].y*hdt; sv[i].z += sa[i].z*hdt;
-        sp[i].x += sv[i].x*dt;  sp[i].y += sv[i].y*dt;  sp[i].z += sv[i].z*dt;
+        su[i].x += sa[i].x*hdt; su[i].y += sa[i].y*hdt; su[i].z += sa[i].z*hdt;
+        double3 v = tinyVel(su[i], c2);
+        sp[i].x += v.x*dt;  sp[i].y += v.y*dt;  sp[i].z += v.z*dt;
         __syncthreads();
-        sa[i] = tinyAcc(sp, sm, N, i);
+        sa[i] = tinyAcc(sp, sm, N, i, &sph[i]);
         __syncthreads();
-        sv[i].x += sa[i].x*hdt; sv[i].y += sa[i].y*hdt; sv[i].z += sa[i].z*hdt;
-        double v2 = sv[i].x*sv[i].x + sv[i].y*sv[i].y + sv[i].z*sv[i].z;
-        tu += dt*(1.0 - v2*inv2c2);
+        su[i].x += sa[i].x*hdt; su[i].y += sa[i].y*hdt; su[i].z += sa[i].z*hdt;
+        v = tinyVel(su[i], c2);
+        double v2 = v.x*v.x + v.y*v.y + v.z*v.z;
+        tu += dt*sqrt(fmax(1.0 + (2.0*sph[i] - v2)/c2, 0.0));
     }
     pout[i] = make_float4((float)sp[i].x, (float)sp[i].y, (float)sp[i].z, P.w);
-    mom[i]  = make_float4((float)(sv[i].x*sm[i]), (float)(sv[i].y*sm[i]),
-                          (float)(sv[i].z*sm[i]), (float)sm[i]);
+    mom[i]  = make_float4((float)(su[i].x*sm[i]), (float)(su[i].y*sm[i]),
+                          (float)(su[i].z*sm[i]), (float)sm[i]);
     tau[i]  = (float)tu;
-    double v2 = sv[i].x*sv[i].x + sv[i].y*sv[i].y + sv[i].z*sv[i].z;
-    regime[i] = (v2 > (double)REL_V2) ? 0x04u : 0x02u;
+    double3 vf = tinyVel(su[i], c2);
+    double v2f = vf.x*vf.x + vf.y*vf.y + vf.z*vf.z;
+    regime[i] = (v2f > (double)REL_V2) ? 0x04u : 0x02u;
 }
 
 // --- conservation meters (fixed-point accumulators; PE via PM potential when available)
@@ -402,10 +454,15 @@ __global__ void kMeters(const float4* pos, const float4* mom, const float* phi,
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i >= N) return;
     float4 p = pos[i], m = mom[i];
-    float im = 1.0f/m.w;
-    double ke = 0.5*(double)(m.x*m.x + m.y*m.y + m.z*m.z)*im;
+    double p2 = (double)m.x*m.x + (double)m.y*m.y + (double)m.z*m.z;
+    double c2 = (double)C_LIGHT*C_LIGHT;
+    double ke = (m.w > 0.0f)
+        ? p2*c2/(sqrt((double)m.w*m.w*c2*c2 + p2*c2) + (double)m.w*c2)   // (gamma-1)mc^2, stable
+        : sqrt(p2)*C_LIGHT;                                              // photon |p|c
     orrery::fixed_atomic_add(&a8[0], ke);
-    if (phi) orrery::fixed_atomic_add(&a8[1], 0.5*(double)m.w*(double)phiAt(phi, p));
+    if (phi && m.w > 0.0f)
+        orrery::fixed_atomic_add(&a8[1], 0.5*(double)m.w*(double)phiAt(phi, p));
+    float im = (m.w > 0.0f) ? 1.0f/m.w : 0.0f;
     orrery::fixed_atomic_add(&a8[2], (double)m.x);
     orrery::fixed_atomic_add(&a8[3], (double)m.y);
     orrery::fixed_atomic_add(&a8[4], (double)m.z);
@@ -715,8 +772,7 @@ __global__ void kHud(uchar4* out, int W, int H, const Glyph* gl, int n){
 static int   gN = 1000000;
 static unsigned long long gSeed = 20260711ull;
 static int   gOW = 1920, gOH = 1080, gSS = 1;
-static const float DT = 1.0f/240.0f;                  // dial
-static const float C_LIGHT = 20.0f;                   // dial
+static const float DT = 1.0f/240.0f;                  // dial (C_LIGHT defined above)
 
 static float4 *dPos[2] = {0,0}, *dMom = 0;
 static float  *dTau = 0;
@@ -763,8 +819,8 @@ static void springStep(Spring& s, float dt){
     s.cur += s.vel*dt;
 }
 static void applyPreset(int i){
-    const float D0[8] = {380.0f, 650.0f, 9.0f, 420.0f,
-                         420.0f, 420.0f, 300.0f, 120.0f}; // per-scenario base distance
+    const float D0[11] = {380.0f, 650.0f, 9.0f, 420.0f, 420.0f, 420.0f,
+                          300.0f, 120.0f, 45.0f, 260.0f, 260.0f};
     float d = D0[gScenario];
     if (i == 0){ cAz.tgt = 35;  cEl.tgt = 24; cDist.tgt = logf(d); }
     if (i == 1){ cAz.tgt = 120; cEl.tgt = 10; cDist.tgt = logf(0.45f*d); }
@@ -856,8 +912,9 @@ static void drawHud(const RP& rp){
     emit(16, 50, line, 0);
     if (gMode) emit(16, 68, "PHYSICAL: L=T4 SAT=1.0 NO CLIP", 0);
     else       emit(16, 68, "CINEMATIC: L=T2.2 SAT=1.2 STRETCH", 0);
-    static const char* SC_HUD[8] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD",
-                                    "MERGER", "ECHO", "RATCHET", "DETECTOR"};
+    static const char* SC_HUD[11] = {"GALAXY", "KEPLER", "THREEBODY", "CLOUD",
+                                     "MERGER", "ECHO", "RATCHET", "DETECTOR",
+                                     "KEPREL", "CLOCKS", "PHOTONS"};
     snprintf(line, sizeof line, "%s %s  DE %+.1E  DP %.1E", SC_HUD[gScenario],
              gSolver == SOLV_PM ? "PM" : (gSolver == SOLV_TINY ? "TINY" :
              (gSolver == SOLV_NONE ? "NONE" : "DIRECT")), gDE, gDP);
@@ -921,26 +978,27 @@ static void forcePass(){
         kGreen<<<(ns + 255)/256, b, 0, simS>>>(dSpec);
         CUFFT_CHECK(cufftExecC2R(planI, dSpec, dReal));   // dReal now holds Phi
         kForceGrid<<<(nc + 255)/256, b, 0, simS>>>(dReal, dFor);
-        kGather<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dFor, dAcc, gN);
+        kGather<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dFor, dReal, dAcc, gN);
     } else if (gSolver == SOLV_DIRECT){
         kDirect<<<(gN + 255)/256, b, 0, simS>>>(dPos[gPub], dMom, dAcc, gN);
     }
 }
 
 static void runTicks(int nt){
-    const float inv2c2 = 1.0f/(2.0f*C_LIGHT*C_LIGHT), hdt = 0.5f*DT;
+    const float invc2 = 1.0f/(C_LIGHT*C_LIGHT), hdt = 0.5f*DT;
     if (gSolver == SOLV_TINY){
         int src = gPub, dst = 1 - gPub;
         kTiny<<<1, 32, 0, simS>>>(dPos[src], dPos[dst], dMom, dTau, dRegime,
-                                  gN, nt, DT, inv2c2);
+                                  gN, nt, DT, invc2);
         gPub = dst; gTick += nt; gSimTime += (double)nt*DT;
     } else {
         dim3 b(256), g((gN + 255)/256);
+        const float* phiP = (gSolver == SOLV_PM) ? dReal : nullptr;
         for (int t = 0; t < nt; t++){
             kKick<<<g, b, 0, simS>>>(dMom, dAcc, gN, hdt);
             int src = gPub, dst = 1 - gPub;
             kDriftK<<<g, b, 0, simS>>>(dPos[src], dPos[dst], dPosErr, dMom, dTau,
-                                       dRegime, gN, DT, inv2c2);
+                                       dRegime, phiP, gN, DT, invc2);
             gPub = dst;
             forcePass();
             kKick<<<g, b, 0, simS>>>(dMom, dAcc, gN, hdt);
@@ -971,14 +1029,19 @@ static Met metersNow(){
         CUDA_CHECK(cudaMemcpy(hm.data(), dMom, gN*sizeof(float4), cudaMemcpyDeviceToHost));
         for (int i = 0; i < gN; i++){
             double m = hm[i].w;
-            M.KE += 0.5*((double)hm[i].x*hm[i].x + (double)hm[i].y*hm[i].y + (double)hm[i].z*hm[i].z)/m;
+            double p2 = (double)hm[i].x*hm[i].x + (double)hm[i].y*hm[i].y + (double)hm[i].z*hm[i].z;
+            double c2 = (double)C_LIGHT*C_LIGHT;
+            M.KE += (m > 0) ? p2*c2/(sqrt(m*m*c2*c2 + p2*c2) + m*c2) : sqrt(p2)*C_LIGHT;
             M.Px += hm[i].x; M.Py += hm[i].y; M.Pz += hm[i].z;
             M.Lz += (double)hp[i].x*hm[i].y - (double)hp[i].y*hm[i].x;
-            double v2 = ((double)hm[i].x*hm[i].x + (double)hm[i].y*hm[i].y + (double)hm[i].z*hm[i].z)/(m*m);
-            if (v2 > REL_V2) M.nRel++; else M.nCls++;
+            if (m <= 0){ M.nRel++; }
+            else {
+                double u2 = p2/(m*m), v2 = u2/(1.0 + u2/c2);
+                if (v2 > REL_V2) M.nRel++; else M.nCls++;
+            }
             for (int j = i + 1; j < gN; j++){
                 double dx = hp[j].x - hp[i].x, dy = hp[j].y - hp[i].y, dz = hp[j].z - hp[i].z;
-                M.PE -= (double)G_DIAL*m*hm[j].w/sqrt(dx*dx + dy*dy + dz*dz + 1e-6);
+                M.PE -= (double)G_DIAL*(double)hm[i].w*hm[j].w/sqrt(dx*dx + dy*dy + dz*dz + 1e-6);
             }
         }
     } else {
@@ -1131,6 +1194,56 @@ static void allocAll(){
         kInitStream<<<(gN + 255)/256, 256>>>(dPos[0], dMom, dTau, dRegime, gN, gSeed);
         gSolver = SOLV_NONE;
         break;
+    case SC_KEPREL: {                                 // einstein contract: eps = 5e-3 orbit
+        gN = 2; gMTot = 10001.0;
+        double mu = (double)G_DIAL*10001.0, rap = 16.0, a = 10.0;
+        double vap = sqrt(mu*(2.0/rap - 1.0/a));
+        float4 hp[2] = { make_float4((float)(-rap/10001.0), 0, 0, 6500.0f),
+                         make_float4((float)( rap*10000.0/10001.0), 0, 0, 9000.0f) };
+        float4 hm[2] = { make_float4(0, (float)(-vap/10001.0*1e4), 0, 1e4f),
+                         make_float4(0, (float)( vap*10000.0/10001.0), 0, 1.0f) };
+        float ht[2] = {0, 0}; unsigned hr[2] = {0x04u, 0x04u};
+        CUDA_CHECK(cudaMemcpy(dPos[0], hp, sizeof hp, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dMom, hm, sizeof hm, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dTau, ht, sizeof ht, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dRegime, hr, sizeof hr, cudaMemcpyHostToDevice));
+        gSolver = SOLV_TINY;
+    } break;
+    case SC_CLOCKS: {
+        gN = 3; gMTot = 10002.0;
+        double GM = (double)G_DIAL*1e4;
+        double vA = sqrt(GM/2.0), vB = sqrt(GM/100.0);
+        float4 hp[3] = { make_float4(0, 0, 0, 6500.0f),
+                         make_float4(2.0f, 0, 0, 12000.0f),
+                         make_float4(100.0f, 0, 0, 4000.0f) };
+        float4 hm[3] = { make_float4(0, 0, 0, 1e4f),
+                         make_float4(0, (float)vA, 0, 1.0f),
+                         make_float4(0, (float)vB, 0, 1.0f) };
+        float ht[3] = {0, 0, 0}; unsigned hr[3] = {0x02u, 0x04u, 0x02u};
+        CUDA_CHECK(cudaMemcpy(dPos[0], hp, sizeof hp, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dMom, hm, sizeof hm, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dTau, ht, sizeof ht, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dRegime, hr, sizeof hr, cudaMemcpyHostToDevice));
+        gSolver = SOLV_TINY;
+    } break;
+    case SC_PHOTONS: {
+        gN = 65; gMTot = 1e4;
+        std::vector<float4> hp(65), hm(65);
+        std::vector<float> ht(65, 0.0f);
+        std::vector<unsigned> hr(65, 0x24u);
+        hp[0] = make_float4(0, 0, 0, 6500.0f);
+        hm[0] = make_float4(0, 0, 0, 1e4f);
+        hr[0] = 0x02u;
+        for (int q = 1; q <= 64; q++){
+            hp[q] = make_float4(-100.0f, 2.0f + 0.25f*(q - 1), 0, 20000.0f);
+            hm[q] = make_float4(1.0f, 0, 0, 0.0f);    // photon: |p| = 1, m = 0
+        }
+        CUDA_CHECK(cudaMemcpy(dPos[0], hp.data(), 65*sizeof(float4), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dMom, hm.data(), 65*sizeof(float4), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dTau, ht.data(), 65*sizeof(float), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(dRegime, hr.data(), 65*sizeof(unsigned), cudaMemcpyHostToDevice));
+        gSolver = SOLV_DIRECT;
+    } break;
     }
     CUDA_CHECK(cudaMemcpy(dPos[1], dPos[0], (size_t)gN*sizeof(float4),
                           cudaMemcpyDeviceToDevice));
@@ -1274,6 +1387,9 @@ int main(int argc, char** argv){
             else if (s == "echo")      gScenario = SC_ECHO;
             else if (s == "ratchet")   gScenario = SC_RATCHET;
             else if (s == "detector")  gScenario = SC_DETECTOR;
+            else if (s == "keprel")    gScenario = SC_KEPREL;
+            else if (s == "clocks")    gScenario = SC_CLOCKS;
+            else if (s == "photons")   gScenario = SC_PHOTONS;
             else { fprintf(stderr, "error: unknown scenario\n"); return 2; }
         }
         else { fprintf(stderr, "usage: tinyuniverse [--scenario galaxy|kepler|threebody|cloud] "
@@ -1298,23 +1414,52 @@ int main(int argc, char** argv){
 
     if (jsonMode || goldenMode){                      // headless instrument face (newton contract)
         if (goldenMode){                              // frozen golden params (seed forced pre-init)
-            const long long GS[8] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000};
+            const long long GS[11] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
+                                      320000, 24000, 3000};
             runSteps = GS[gScenario];
         }
         if (runSteps <= 0){
-            const long long GS[8] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000};
+            const long long GS[11] = {10000, 1000000, 1000000, 12000, 12000, 12000, 4000, 4000,
+                                      320000, 24000, 3000};
             runSteps = GS[gScenario];
         }
         long long done = 0, nextPct = 10;
-        const int batch = (gSolver == SOLV_TINY) ? 20000 : 250;
+        const int batch = (gSolver == SOLV_TINY)
+                        ? ((gScenario == SC_KEPREL) ? 1000 : 20000) : 250;
         const bool wantS = (gScenario == SC_MERGER || gScenario == SC_ECHO);
         double S0 = 0, Smid = 0, Sprev = 0;
         int monoUp = 0, monoTot = 0;
+        double prcPrev = 0, prcTot = 0, prcCum = 0; bool prcInit = false;
+        std::vector<double> angs;
         if (wantS){ S0 = entropyNow(); Sprev = S0; }
         while (done < runSteps){
             int nt = (int)((runSteps - done) < batch ? (runSteps - done) : batch);
             runTicks(nt);
             done += nt;
+            if (gScenario == SC_KEPREL){              // LRL angle, batch-sampled + unwrapped
+                float4 sp2[2], sm2[2];
+                CUDA_CHECK(cudaStreamSynchronize(simS));
+                CUDA_CHECK(cudaMemcpy(sp2, dPos[gPub], sizeof sp2, cudaMemcpyDeviceToHost));
+                CUDA_CHECK(cudaMemcpy(sm2, dMom, sizeof sm2, cudaMemcpyDeviceToHost));
+                double c2 = (double)C_LIGHT*C_LIGHT;
+                double rx = sp2[1].x - sp2[0].x, ry = sp2[1].y - sp2[0].y;
+                double u1x = sm2[1].x/sm2[1].w, u1y = sm2[1].y/sm2[1].w;
+                double u0x = sm2[0].x/sm2[0].w, u0y = sm2[0].y/sm2[0].w;
+                double g1 = sqrt(1.0 + (u1x*u1x + u1y*u1y)/c2), g0 = sqrt(1.0 + (u0x*u0x + u0y*u0y)/c2);
+                double vx = u1x/g1 - u0x/g0, vy = u1y/g1 - u0y/g0;
+                double mu = (double)G_DIAL*10001.0;
+                double L = rx*vy - ry*vx, rn = sqrt(rx*rx + ry*ry);
+                double ex = vy*L/mu - rx/rn, ey = -vx*L/mu - ry/rn;
+                double ang = atan2(ey, ex);
+                if (!prcInit){ prcPrev = ang; prcInit = true; angs.push_back(0.0); }
+                else {
+                    double dgl = ang - prcPrev;
+                    while (dgl >  PI_F) dgl -= 2.0*PI_F;
+                    while (dgl < -PI_F) dgl += 2.0*PI_F;
+                    prcCum += dgl; prcPrev = ang;
+                    angs.push_back(prcCum);
+                }
+            }
             if (wantS){
                 double S = entropyNow();
                 if (S >= Sprev - 0.01) monoUp++;      // fluctuation-scale tolerance (D-015)
@@ -1361,6 +1506,64 @@ int main(int argc, char** argv){
         using namespace orrery;
         auto B = [](bool b){ return std::string(b ? "true" : "false"); };
         switch (gScenario){
+        case SC_KEPREL: {
+            // exact Sommerfeld precession for relativistic Kepler (dp/dt = -mu m r_hat/r^2):
+            // per orbit 2*pi*(1/Lambda - 1), Lambda = sqrt(1 - (mu/(c*l))^2), l = |r x u| at init
+            double mu = (double)G_DIAL*10001.0, aa = 10.0, rap = 16.0;
+            double uap = sqrt(mu*(2.0/rap - 1.0/aa));
+            double l = rap*uap;
+            double lam = sqrt(1.0 - (mu/((double)C_LIGHT*l))*(mu/((double)C_LIGHT*l)));
+            double rate = 2.0*3.14159265358979*(1.0/lam - 1.0);
+            double Tn = 2.0*3.14159265358979*sqrt(aa*aa*aa/mu);
+            double prcExp = rate*((double)runSteps/240.0)/Tn;
+            // least-squares slope over dense samples averages out the intra-orbit
+            // LRL oscillation (endpoint sampling aliases it — measured, D-016)
+            {
+                size_t n = angs.size();
+                double tb = (n - 1)/2.0, num = 0, den = 0, ab = 0;
+                for (size_t q = 0; q < n; q++) ab += angs[q];
+                ab /= n;
+                for (size_t q = 0; q < n; q++){ num += (q - tb)*(angs[q] - ab); den += (q - tb)*(q - tb); }
+                prcTot = (num/den)*(double)(n - 1);
+            }
+            double rel = fabs(prcTot/prcExp - 1.0);
+            pass = (rel < 0.05) && (maxr < 30.0);
+            gates = "\"prec_lt_5pc\":" + B(rel < 0.05) + ",\"bounded_r_lt_30\":" + B(maxr < 30.0);
+            resExtra = ",\"prec_meas\":" + fmt6(prcTot) + ",\"prec_exp\":" + fmt6(prcExp)
+                     + ",\"prec_rel_err\":" + fmt6(rel);
+        } break;
+        case SC_CLOCKS: {
+            float ht3[3];
+            CUDA_CHECK(cudaMemcpy(ht3, dTau, sizeof ht3, cudaMemcpyDeviceToHost));
+            double GM = (double)G_DIAL*1e4, c2 = (double)C_LIGHT*C_LIGHT;
+            auto aOf = [&](double r0){
+                double u0 = sqrt(GM/r0), v0 = u0/sqrt(1.0 + u0*u0/c2);
+                return -GM/(2.0*(0.5*v0*v0 - GM/r0));
+            };
+            double aA = aOf(2.0), aB = aOf(100.0);
+            double expd = sqrt(1.0 - 3.0*GM/(aA*c2))/sqrt(1.0 - 3.0*GM/(aB*c2));
+            double ratio = (double)ht3[1]/(double)ht3[2];
+            pass = fabs(ratio - expd) < 2e-3;
+            gates = "\"tau_ratio_lt_2e-3\":" + B(pass);
+            resExtra = ",\"tau_a\":" + fmt6(ht3[1]) + ",\"tau_b\":" + fmt6(ht3[2])
+                     + ",\"ratio\":" + fmt6(ratio) + ",\"ratio_exp\":" + fmt6(expd);
+        } break;
+        case SC_PHOTONS: {
+            std::vector<float4> hm65(65);
+            CUDA_CHECK(cudaMemcpy(hm65.data(), dMom, 65*sizeof(float4), cudaMemcpyDeviceToHost));
+            double GM = (double)G_DIAL*1e4, c2 = (double)C_LIGHT*C_LIGHT;
+            double sum = 0; int cnt = 0;
+            for (int q = 19; q <= 64; q++){
+                double bq = 2.0 + 0.25*(q - 1);
+                double angm = atan2((double)hm65[q].y, (double)hm65[q].x);
+                double ange = -4.0*GM/(c2*bq);
+                sum += fabs(angm/ange - 1.0); cnt++;
+            }
+            double meanrel = sum/cnt;
+            pass = (meanrel < 0.05);
+            gates = "\"defl_mean_lt_5pc\":" + B(pass);
+            resExtra = ",\"defl_mean_rel\":" + fmt6(meanrel) + ",\"photons_gated\":" + fmti(cnt);
+        } break;
         case SC_MERGER: {
             double rise = Send - S0, mf = monoTot ? (double)monoUp/monoTot : 0;
             pass = (rise > 0.3) && (mf >= 0.75) && (de < 0.08);

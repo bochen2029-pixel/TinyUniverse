@@ -38,10 +38,15 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(deferred again, declared)* P³M/spatial hash — arrives with close-encounter physics (M4/M5)
 - **Gate: MET** — the arrow emerges from reversible microdynamics, reverses on cue, and records ratchet exactly as the theory's closed form demands.
 
-## M4 · `einstein` — the relativistic layer
-- ☐ Rapidity-form p = γmv integrator; per-particle τ driving all animation; photons at c
-- ☐ 1PN precession from Φ; 2.5PN drag (binaries inspiral); Kepler-at-t_emit observation
-- **Gate:** nexus N3/N7/N8/N9 parity at declared tolerance; a clock pair visibly desyncs across a potential well.
+## M4 · `einstein` — the relativistic layer ☑ **CLOSED 2026-07-11**
+- ☑ SR inertia always-on for every particle: v = p/√(m²+p²/c²) (cancellation-free; v<c structural — N7 discipline by construction); photons v = c·p̂ with factor-2 bending; full proper time (photons don't age)
+- ☑ `keprel` golden `f985e473`: precession vs **exact Sommerfeld** formula — 0.50% (LS-fit over 320 LRL samples, D-016)
+- ☑ `clocks` golden `330c86a7`: τ_A/τ_B across a potential well to 6.3e-4 of analytic
+- ☑ `photons` golden `c4c565de`: GR factor-2 deflection to 0.83% over 46 impact parameters
+- ☑ All 8 prior goldens superseded + re-frozen (D-016, operator-signed) — **12/12 GREEN in 66 s**
+- ✖ 1PN field term — withdrawn after measurement (6.41π vs claimed 7π; Q-006); strong-field precession → M5 pseudo-potential oracles
+- ☐ *(deferred → M5/M7, declared)* 2.5PN inspiral drag · Kepler-at-t_emit rendering
+- **Gate: MET** — relativistic kepler at the exact analytic rate; clocks desync as GR demands; light bends at the GR factor and does not age.
 
 ## M5 · `gargantua` — compact objects
 - ☐ Collapse condition → BH entity; Paczyński–Wiita disk dynamics; Hawking evaporation (T ∝ ħ/M)

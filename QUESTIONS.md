@@ -8,4 +8,6 @@
 
 **Q-004 · Quantum bubble budget on 16 GB.** 64³ fp32 complex ψ ≈ 2 MB/bubble (+FFT scratch); hundreds are plausible but unmeasured. If 3D is tight, sanctioned fallbacks: 2D bubbles (visually honest for thin scenes) or fewer/larger. *Resolved by measurement at M6 — no speculation.*
 
+**Q-006 · The combined SR-inertia + 1PN-field precession coefficient.** The linear-superposition argument (SR π + harmonic 6π = 7π) is contradicted by measurement (6.41π, stable, fp64). Either the superposition reasoning is subtly wrong for dp/dt-form dynamics or the implementation deviates from the declared model. Owed: fp64 isolation experiments (SR-only ✓ = exact Sommerfeld; 1PN-only with Newtonian inertia should = 6π; then combined) + a proper Gauss-equations derivation. Until settled, strong-field precession is M5's pseudo-potential territory (D-016). *Blocking nothing; reopen at M5.*
+
 **Q-005 · Vulkan vs DX12.** Default Vulkan (cuda-samples parity, Mímir reference). Revisit only if Streamline/DLSS or tooling friction is measured to be materially worse than DX12. *One-way door closes at M1 freeze.*
