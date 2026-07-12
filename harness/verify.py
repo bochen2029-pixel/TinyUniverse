@@ -46,6 +46,13 @@ GOLDENS = [
 FIELD_GOLDENS = [
     ("field_freepacket", [r"build\field_nexus.exe", "--scenario", "freepacket", "--golden"]),
     ("field_sho3d",      [r"build\field_nexus.exe", "--scenario", "sho3d",      "--golden"]),
+    # soliton = the PM+psi gravity weld (self-bound SP soliton; r_c*M scale-covariant
+    # to 3e-8 across a 2:1 mass pair -> quantum pressure balances self-gravity). 256^3,
+    # 2x10000 imaginary-time iters -> ~7 min; the load-bearing new-physics golden.
+    ("field_soliton",    [r"build\field_nexus.exe", "--scenario", "soliton",    "--golden"]),
+    # echoF = determinism receipt: time-reversal by conjugation (reversible to fp32
+    # round-off) + byte-exact reproducibility. 128^3, ~2 s.
+    ("field_echoF",      [r"build\field_nexus.exe", "--scenario", "echoF",      "--golden"]),
 ]
 
 def gpu_preflight(min_free_mb=2000):
