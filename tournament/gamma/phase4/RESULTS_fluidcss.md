@@ -183,3 +183,77 @@ background reaching a real sonic point), the wall is stated precisely, and the g
 neither faked nor tuned-to.** The tournament→build→measure loop is *wired and armed* (deterministic tool,
 golden, autotune receipt); it has not yet been *closed* on β. Closing it needs the sonic-point two-sided
 match + the perturbation shoot, specified above.
+
+---
+
+# 8. Stage-B UPDATE (2026-07-12, overnight) — degeneracy FIXED; β=0.3558 blocked by a SYSTEM MISMATCH
+
+**Bottom line (honest, no number faked):** the Stage-B eigenvalue **degeneracy is fixed** — the two-sided
+linear match now produces an O(1), non-degenerate residual and a clean, converged, triple-cross-checked
+eigenvalue. But that eigenvalue is **κ₀ ≈ 1.00 (β ≈ 1.00)**, NOT the KHA value 2.81/0.3558, because the
+perturbation operator's **background system is not faithfully KHA's**. The KHA target 0.3558 is therefore
+**still not measured**, and the precise reason is now diagnosed to the equation level.
+
+## 8.1 The degeneracy fix (the stated bug) — DONE
+
+Prior Wronskian match had `|det| ~ 1e-14 ∀κ` (degenerate bases). Root cause: the 3 sonic-analytic seeds,
+integrated inward, collapse onto the single fastest-growing analytic direction; column-normalizing three
+near-parallel vectors gives a rank-deficient block → det≈0 for every κ. **Fix (`stageB_qr.py`):** build the
+3-D sonic-analytic subspace from the exact Frobenius series at the sonic point and **QR-orthonormalize** it
+at the match point x_m; the residual is `det[c | Q]` (c = unit center-regular vector, Q = orthonormal
+analytic basis) and equivalently `‖c − QQ†c‖`. Both are **O(1)**. Dimension count (verified): center-regular
+subspace dim 1 (indicial exponents at center {+2,−1,−1,−2}, one Re>0), sonic-analytic subspace dim 3
+(Fuchsian residue indicial exponents {0,0,0,1−2κ}); 1+3 = 4, so the intersection is nontrivial only at
+discrete κ ⇒ det = 0. Speed: L is **exactly affine in κ** (`L = P + κQ`, no κ in any denominator — verified),
+so per-κ assembly is pure numpy (DFT Laurent extraction of the sonic-series matrices).
+
+## 8.2 The measured eigenvalue (of the operator in hand) — κ₀ ≈ 1.00, β ≈ 1.00
+
+Three **independent** methods agree there is exactly one real eigenvalue in κ∈[0.1, 4.0], at κ₀≈1.00:
+- QR `det[c|Q]` sign change and `‖rej‖` global minimum (`stageB_qr.py`).
+- Left-dual projection `c_na = wL_n·hp / (x_s−x)^(1−2κ)` sign change (`stageB_fast.py`), the pole-normalized
+  exact non-analytic dual — **one** Re(c_na) sign change, between κ=1.00 and 1.10; none near 0.357 or 2.81.
+- Convergence (left-dual, brentq on Re c_na): κ₀ = 1.00597 (z0=e⁻¹¹) → 1.00305 (z0=e⁻¹²), spread 2.9e-3 →
+  **κ₀ ≈ 1.003, β ≈ 0.997.** (κ=1 is the 1−2κ=−1 integer resonance; this mode is likely gauge/spurious for
+  this operator. No physical mode at 2.81 exists in this operator — all three methods concur.)
+
+## 8.3 Why it is not 2.81 — the SYSTEM MISMATCH (diagnosed to the equation)
+
+1. **The background in `css_core.py`/`Lmat.pkl` (the prior "corrected full-4D" system) is NOT KHA's**
+   (`compare_systems.py`): `CSS_V' − KHA_V'` and `CSS_ω' − KHA_ω'` are large nonzero rational functions,
+   both directly and under the candidate symmetry V→−V. It was constructed with the **sonic point at
+   V=+1/√3**, whereas **KHA's true sonic point is at V=−1/√3** (`kha_verbatim.py`: the fluid 2×2 determinant
+   is `−4·(3N²V²−N²+4NV−V²+3)`; it vanishes at V=−1/√3 and equals 32/3 at V=+1/√3). Different ODE ⇒
+   different spectrum, so κ≈1.0 ≠ 2.81 is expected and honest — not a bug.
+2. **KHA's PRINTED equations do not admit their own regular center.** Transcription re-verified verbatim
+   against the arXiv TeX (`KHA95_src/9503007.tex` L388–414; the `[VERIFY-BRACES]` ambiguity resolves
+   uniquely to `4{(1+V²)V_,s+(1+V²+2NV)V_,x}`). Yet the KHA-printed fluid system gives, along the physical
+   center path `A=1+a₂z², ω=(3/2)a₂z², V=v₁z, N=n₀/z`:
+   > **`dV/dx = −3/2 + O(z)`** (a nonzero constant, independent of a₂,v₁,n₀; `kha_pert_clean.py`).
+   So `V` cannot → 0 at x→−∞: the printed KHA eq.(18) is **internally inconsistent with its stated center
+   BC A=1,V=0** — a genuine error in the printed system (PRL typo, or a subtlety only resolvable via KHA's
+   ref. Ori–Piran PRD 42 (1990), not fetched here).
+3. **The KHA operator's sonic passage is pathological.** At V=−1/√3 the only real separatrix slope is the
+   steep one (ω'≈38.1, V'≈−2.31); its background series **diverges** (2nd-order coeffs ~1e6) and the
+   perturbation residue has indicial exponents `{−2,0,0,0}` — **no `1−2κ` branch at all**. So the analyticity
+   (eigenvalue) condition cannot even be posed on that branch.
+
+**Net:** neither artifact in hand yields 2.81. The css system is center-regular but wrong physics
+(β≈0.99, contradicting the ground-truth **β≈0.36** from Evans–Coleman evolution); the KHA-printed system is
+right physics on paper but not center-regular as transcribed. **The correct KHA fluid equations — the one
+system that is BOTH faithfully KHA AND center-regular — are not in hand.** That is the precise wall.
+
+## 8.4 What would close it
+Obtain the correct KHA fluid sector: fetch **Ori–Piran, PRD 42 (1990) 1068** (KHA's ref. [9], the worked
+CSS radiation-fluid sonic analysis) and transcribe its equations, OR re-derive `∇_aT^{ab}=0` for the
+`p=ρ/3` fluid in the KHA metric from scratch and validate it against BOTH (a) a regular center
+(dV/dx→0) AND (b) the independent evolution value β≈0.36 (not just internal consistency — the prior
+"full-4D" derivation was center-regular but gave β≈0.99, so internal consistency is insufficient). Then run
+the (now working, degeneracy-free) `stageB_qr.py` two-sided QR match on that operator. Files:
+`stageB_qr.py` (the fix), `stageB_qr_solve.py`, `kha_pert_clean.py`, `kha_fast_struct.py`,
+`compare_systems.py`, `diag_residue.py`, `diag_center.py`.
+
+**Golden / C++ port: intentionally NOT done.** Per the task's own gate ("if κ₀ lands ≈2.81055, port to C++
+and freeze the golden"), the port is withheld because κ₀≠2.81 — freezing β≈1.0 would enshrine a
+physically-meaningless number. `fluidcss_nexus.cpp` continues to emit `β = NOT MEASURED`, verdict `blocked`,
+exit 1 (honest).
