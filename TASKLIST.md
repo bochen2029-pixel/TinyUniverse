@@ -92,8 +92,22 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(deferred → AMR contract, D-021)* **precise Choptuik γ ≈ 0.374** — uniform grid caps the self-similar curvature (measured); N0 proves the transition, not the exponent. Also: bound oscillaton eigen-profile; clang/g++ parity.
 - **Gate: MET (honest scope)** — the spherical EKG evolution is trustworthy (four green oracles) and the Choptuik *phenomenon* (Type-II, arbitrarily small BHs) is demonstrated and frozen, before any GPU substrate code. Precise γ named as future work (D-021, RAYFORMER discipline).
 
-### N1–N4 (GPU, future — each gated against N0 + the 21 v1 goldens)
-- ☐ N1 `field` (Schrödinger–Poisson 256³–512³) · ☐ N2 `lapse` (α(x) + photon field) · ☐ N3 `horizon` (BSSN+scalar; may reach precise γ) · ☐ N4 `star` (fusion closure + radiation + Ratchet lattice — the hydrogen-ball sentence)
+### N1 · `field` — the Schrödinger–Poisson weld ☑ **CLOSED 2026-07-12** (merged to master `8ace261`)
+- ☑ Contract `contracts/field.contract.md` v1.0.2; tool `substrate/field_nexus.cu` (M6 split-step ψ welded to M2 PM cuFFT-Poisson `kGreen` verbatim, one loop)
+- ☑ 6/6 goldens GREEN: freepacket `03dd3a3b` + sho3d `dfbc6185` (exact vs nexus N5) · **soliton `d163d765`** (the weld — SP self-similar r_c·M scale-covariant to 3e-8, two-passed) · echoF `433ddcc8` (reversal receipt) · cloudF `2308ea49` (collapse@t_ff) · mergerF `a09dda6a` (two-body attraction)
+- ☐ *(deferred → Q-N1-1, D-022)* galaxyF (v1 rotation curve — ψ needs quantized vortices + 512-su box; cloudF is the built irrotational cross-check)
+- **Gate: MET** — the PM+ψ gravity weld across three dynamical regimes + both Madelung limits (D-022).
+
+### N2 · `lapse` — the clock ☑ **CLOSED 2026-07-12**
+- ☑ Contract `contracts/lapse.contract.md` v1.0.0; tool `substrate/lapse_nexus.cu` (lapse α=√(1+2Φ/c²) + declared proper-time field τ=∫α dt; reuses N1 `kGreen` verbatim; c goes LIVE)
+- ☑ `lapse_redshift` `e2c75be5`: **exact Schwarzschild gravitational time dilation** — a clock at r≈2r_s ticks 40% slow (z=0.398), α-err **5.7e-6** vs 1/√(1−r_s/r)−1; τ-integrator 6.6e-6
+- ☑ `lapse_redshiftPM` `3dddb950`: **the substrate weld** — the PM-Poisson well through the lapse has Newtonian depth A/GM=0.9643 (3.6%, the PM floor) → correct gravitational redshift from the substrate's own gravity
+- ☑ `--selftest` (flatlapse): Φ=0 → α≡1 exact, τ=N·dt to 6.6e-7. Harness rows added (behind the GPU preflight); both goldens two-passed cold.
+- ☐ *(deferred → N3 `curve`, D-023)* the spatial metric — light bending, orbit precession, Shapiro delay (N2 is temporal-metric-only: exact redshift, no bent paths)
+- **Gate: MET** — clocks run slow in gravity wells, on the substrate; the redshift is exact Schwarzschild and the substrate's own gravity produces it (D-023).
+
+### N3–N4 (GPU, future — each gated against N0 + the 21 v1 goldens)
+- ☐ N3 `curve` (the lattice metric back-reacts — light bending, precession; fluid-CSS Stage-A as the static oracle; may reach precise γ) · ☐ N4 `star` (fusion closure + radiation + Ratchet lattice — the hydrogen-ball sentence)
 
 ## Backlog (measured adoption only; each needs an honest baseline)
 - ☐ DLSS 4.5 via Streamline · ☐ RTXDI/ReSTIR emissive-particle lighting · ☐ NRD · ☐ Slang port of shared math (D-008) · ☐ UE 5.8 TextureShare showcase shell · ☐ MCP surface for scenario driving · ☐ df64 zoom ladder (D-010 gate)

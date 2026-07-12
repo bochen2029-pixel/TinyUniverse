@@ -12,6 +12,7 @@ BUILDS = [
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\\substrate_nexus.cpp /Fe:build\\substrate_nexus.exe /Fo:build\\substrate_nexus.obj',
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\tinyuniverse.exe app\\tinyuniverse.cu core\\lib\\envelope.cpp user32.lib gdi32.lib opengl32.lib cufft.lib',
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\field_nexus.exe substrate\\field_nexus.cu cufft.lib',   # v2 N1 (SP field)
+    f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\lapse_nexus.exe substrate\\lapse_nexus.cu cufft.lib',   # v2 N2 (lapse/clock)
 ]
 # CPU fp64 oracles (no GPU) run regardless of card contention; GPU goldens follow the preflight.
 CPU_GOLDENS = [
@@ -61,6 +62,14 @@ FIELD_GOLDENS = [
     # mutual gravity (separation shrinks ~2x) and form a denser remnant (v1 merger
     # physics). Proves gravity BETWEEN distinct masses is real. 128^3, ~8 s.
     ("field_mergerF",    [r"build\field_nexus.exe", "--scenario", "mergerF",    "--golden"]),
+]
+# v2 N2 lapse (the clock: alpha = sqrt(1+2 Phi/c^2), proper time tau = integral alpha dt).
+# GPU goldens behind the same preflight (both ~1-2 s). redshift = exact Schwarzschild
+# gravitational time dilation (analytic oracle); redshiftPM = the substrate weld (the
+# PM-Poisson well of Newtonian depth, through the lapse -> correct gravitational redshift).
+LAPSE_GOLDENS = [
+    ("lapse_redshift",   [r"build\lapse_nexus.exe", "--scenario", "redshift",   "--golden"]),
+    ("lapse_redshiftPM", [r"build\lapse_nexus.exe", "--scenario", "redshiftPM", "--golden"]),
 ]
 
 def gpu_preflight(min_free_mb=2000):
@@ -112,7 +121,9 @@ def main():
         red += run_goldens(GOLDENS)
         print("[gpu] v2 N1 field goldens:")
         red += run_goldens(FIELD_GOLDENS)
-    n = len(CPU_GOLDENS) + ((len(GOLDENS) + len(FIELD_GOLDENS)) if gpu_ok else 0)
+        print("[gpu] v2 N2 lapse goldens:")
+        red += run_goldens(LAPSE_GOLDENS)
+    n = len(CPU_GOLDENS) + ((len(GOLDENS) + len(FIELD_GOLDENS) + len(LAPSE_GOLDENS)) if gpu_ok else 0)
     print("-"*40)
     if not gpu_ok:                              # CPU oracles still reported; GPU suite deferred
         print(f"  CPU {'ALL GREEN' if red==0 else f'{red} RED'}; GPU goldens SKIPPED "
