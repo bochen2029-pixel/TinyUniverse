@@ -45,7 +45,7 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☑ `photons` golden `c4c565de`: GR factor-2 deflection to 0.83% over 46 impact parameters
 - ☑ All 8 prior goldens superseded + re-frozen (D-016, operator-signed) — **12/12 GREEN in 66 s**
 - ✖ 1PN field term — withdrawn after measurement (6.41π vs claimed 7π; Q-006); strong-field precession → M5 pseudo-potential oracles
-- ☐ *(deferred → M5/M7, declared)* 2.5PN inspiral drag · Kepler-at-t_emit rendering
+- ◐ **2.5PN inspiral — the radiation-reaction PHYSICS is DONE** (`nexus/inspiral_nexus.cpp`, Peters 1964: circular merger time to 1.3e-13 + eccentric a(e) circularization to 5e-11; goldens `inspiral_circular` `2eba79de` / `inspiral_eccentric` `4578d3ac`; D-025). *Still deferred:* the app drag-term integration (so in-app binaries chirp) · Kepler-at-t_emit rendering
 - **Gate: MET** — relativistic kepler at the exact analytic rate; clocks desync as GR demands; light bends at the GR factor and does not age.
 
 ## M5 · `gargantua` — compact objects ☑ **CLOSED 2026-07-12**
