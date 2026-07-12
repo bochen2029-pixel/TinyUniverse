@@ -1,0 +1,28 @@
+{
+  "tool": "autotune",
+  "orrery_version": "1.0.0",
+  "positive": {
+    "x_located": 0.5,
+    "located_error": 0.0,
+    "on_target": true,
+    "verdict": "pass",
+    "exit": 0,
+    "blake2b": "db490a3111b770996fcec05b9bc59981f35395980be5f1ad617101dd13552c80"
+  },
+  "neg_control": {
+    "x_located": 0.5,
+    "located_error": 0.09999999999999998,
+    "on_target": false,
+    "verdict": "fail",
+    "exit": 1,
+    "blake2b": "bf7023ee399c91946e010eab1fb0bd39c7aa686e40c05a38013dd31e37329c10"
+  },
+  "tight_tol": {
+    "x_located": 0.5,
+    "located_error": 0.0,
+    "on_target": true,
+    "verdict": "pass",
+    "exit": 0,
+    "blake2b": "6c6e2adac5c7fd549e1eda4d0ba73c2466165a21061240f0760b1be9307a5131"
+  }
+}

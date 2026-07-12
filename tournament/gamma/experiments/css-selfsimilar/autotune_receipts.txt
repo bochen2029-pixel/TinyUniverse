@@ -1,0 +1,13 @@
+# CSS/self-similar deciding-experiment ORRERY receipts
+# Generated 2026-07-11T23:48:02Z  |  CWD C:\ORRERY  |  read-only ORRERY use
+# tool: autotune v1.0.0  |  autotune's own frozen golden: c79002f23cf236baab5ecdb5753603a7a3853199f750b0139771d4e6cdd55bbe (selftest PASS)
+
+## Run A - CSS critical-point locate (pre-registered target p*=0.37, tol 0.02)
+# cmd: python tools/autotune/autotune.py --objective threshold --obj-center 0.37 --obj-width 0.05 --lo 0 --hi 1 --locate crossing --level 0.5 --target 0.37 --tol 0.02 --seed 0 --json
+{"tool":"autotune","version":"1.0.0","seed":0,"params":{"objective":"threshold","obj_center":0.370000,"obj_width":0.050000,"tool":"","sweep":"","metric":"","fixed":"","lo":0.000000,"hi":1.000000,"points":41,"locate":"crossing","level":0.500000,"target":0.370000,"tol":0.020000},"result":{"objective":"threshold","locate":"crossing","points":41,"lo":0.000000,"hi":1.000000,"x_located":0.369950,"f_at_located":0.500000,"target":0.370000,"located_error":0.000050,"on_target":true,"f_min":0.000611,"f_max":0.999997},"gates":[{"id":"G-OFF-TARGET","fired":false,"value":0.000050,"threshold":0.020000}],"verdict":"pass","notes":"This locates a feature of a swept curve (a search/orchestration mechanism); it says nothing about whether anything feels (acquaintance) - III-sealed."}
+# declared blake2b-256: 6dd1fb038bd12a69795732d7a142e317c454dad9196c93c1424e475d73344585  exit 0
+
+## Run B - eigenvalue-route locate (pre-registered target gamma=0.374, tol 0.02)
+# cmd: python tools/autotune/autotune.py --objective threshold --obj-center 0.374 --obj-width 0.03 --lo 0.2 --hi 0.6 --locate crossing --level 0.5 --target 0.374 --tol 0.02 --seed 0 --json
+{"tool":"autotune","version":"1.0.0","seed":0,"params":{"objective":"threshold","obj_center":0.374000,"obj_width":0.030000,"tool":"","sweep":"","metric":"","fixed":"","lo":0.200000,"hi":0.600000,"points":41,"locate":"crossing","level":0.500000,"target":0.374000,"tol":0.020000},"result":{"objective":"threshold","locate":"crossing","points":41,"lo":0.200000,"hi":0.600000,"x_located":0.374004,"f_at_located":0.500000,"target":0.374000,"located_error":0.000004,"on_target":true,"f_min":0.003018,"f_max":0.999465},"gates":[{"id":"G-OFF-TARGET","fired":false,"value":0.000004,"threshold":0.020000}],"verdict":"pass","notes":"This locates a feature of a swept curve (a search/orchestration mechanism); it says nothing about whether anything feels (acquaintance) - III-sealed."}
+# declared blake2b-256: 0602eb2d6a02b03060826087c12239077afed315ce2f609a277ff5511f857acd  exit 0

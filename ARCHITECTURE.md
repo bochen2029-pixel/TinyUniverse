@@ -137,6 +137,7 @@ ADRs in `DECISIONS.md`. Summary: CUDA 13.1 · sm_89 (fat binary sm_89+sm_90 SASS
 | planck | CUDA (cuFFT) | quantum bubbles + inscription collapse | new | nexus N5 | planned (M6) |
 | cosmos | CUDA | torus wrap, little-planet, light history, a(t), roaming bubbles | new | circumnav/expand/bubbles + wrap consistency | **CLOSED (M7) — 21/21 green** |
 | **substrate_nexus** | C++17 fp64 | **v2 N0**: spherical Einstein–Klein–Gordon oracle; demonstrates Choptuik Type-II critical collapse (BH mass → 0 at p*) | new (NR literature; G=c=1) | S1–S5 battery (flat/sub/super/transition/massive) | **CLOSED (v2 N0) — golden `13aa73e5`; precise γ deferred to AMR (D-021)** |
+| **field_nexus** | CUDA (cuFFT) | **v2 N1**: Schrödinger–Poisson on a 3D lattice — M6 split-step ψ **welded** to M2 PM cuFFT-Poisson (one loop, one field). The PM+ψ gravity weld demonstrated across 3 dynamical regimes (soliton / collapse / two-body) | M6 `kQ3PhaseK` + M2 `kGreen` (verbatim) | N5 (freepacket/sho3d exact) + analytic SP soliton + free-fall/two-body + structural echo | **IN PROGRESS (v2 N1) — 6/6 green: freepacket `03dd3a3b`, sho3d `dfbc6185`, soliton `d163d765` (weld, scale_rel 3e-8, two-passed), echoF `433ddcc8`, cloudF `2308ea49` (collapse@t_ff), mergerF `a09dda6a` (2-body attraction); galaxyF (rotation curve) deferred Q-N1-1 (D-022)** |
 
 Shared infrastructure (not a module): `core/lib/` — the liborrery lift (D-005), KAT-selftested, verbatim.
 

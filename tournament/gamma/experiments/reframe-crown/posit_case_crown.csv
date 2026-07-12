@@ -1,0 +1,13 @@
+account,id,kind,layer,weight,covers,via,floating
+patchwork,amr_refinement_engine,posit,physics,1.0,,,0
+patchwork,deterministic_amr_claim,bridge,physics,1.0,deterministic_single_file_cpu_under_5min,,0
+patchwork,amr_resolves_gamma_in_budget,bridge,physics,1.0,analytic_NR_anchor_matched_under_1pct,,0
+patchwork,gamma_is_the_deep_receipt,posit,physics,1.0,strong_gravity_selfgravitating_bound_state,,0
+patchwork,gamma_generalizes_claim,bridge,physics,1.0,generalizes_to_N1_N4_star_stage,,0
+unified,constrained_metric_solver,import,physics,0.2,,,0
+unified,shooting_rootfind,import,physics,0.2,,,0
+unified,complex_scalar_ansatz,posit,physics,1.0,,,0
+unified,bosonstar_bound_state_derived,derived,physics,0.0,strong_gravity_selfgravitating_bound_state,constrained_metric_solver;complex_scalar_ansatz,0
+unified,MofOmega_curve_derived,derived,physics,0.0,analytic_NR_anchor_matched_under_1pct,shooting_rootfind;bosonstar_bound_state_derived,0
+unified,determinism_derived,derived,physics,0.0,deterministic_single_file_cpu_under_5min,constrained_metric_solver;shooting_rootfind,0
+unified,generalizes_derived,derived,physics,0.0,generalizes_to_N1_N4_star_stage,complex_scalar_ansatz;bosonstar_bound_state_derived,0

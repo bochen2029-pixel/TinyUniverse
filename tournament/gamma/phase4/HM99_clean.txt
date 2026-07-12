@@ -1,0 +1,532 @@
+<!-- ============ CHUNK 1/1 ============ -->
+<!-- source: HM99.pdf -->
+<!-- section: Page 1 -->
+
+## Page 1
+
+arXiv:gr-qc/9901031v4  6 Dec 1999
+Critical phenomena and a new class of self-similar spherically symmetric perfect-ﬂuid
+solutions
+B. J. Carr,1∗A. A. Coley,2† M. Goliath,3‡ U. S. Nilsson,4§ and C. Uggla5∗∗
+1Astronomy Unit, Queen Mary and Westﬁeld College, University of London, Mile End Road, London E1 4NS, England
+2Department of Mathematics and Statistics, Dalhousie University, Halifax, Nova Scotia, B3H 3J5, Canada
+3Department of Physics, Stockholm University, Box 6730, S-113 85 Stockholm, Sweden
+4Department of Applied Mathematics, University of Waterloo, Waterloo, Ontario N2L 3G1, Canada
+5Department of Engineering Sciences, Physics and Mathematics, University of Karlstad, S-651 88 Karlstad, Sweden
+(October 9, 2018)
+We consider the self-similar solutions associated with the
+critical behavior observed in the gravitational collapse of
+spherically symmetric perfect ﬂuids with equation of state
+p = αµ. We identify for the ﬁrst time the global nature of
+these solutions and show that it is sensitive to the value of α.
+In particular, for α > 0.28, we show that the critical solution
+is associated with a new class of asymptotically Minkowski
+self-similar spacetimes. We discuss some of the implications
+of this for critical phenomena.
+I. INTRODUCTION
+One of the most exciting developments in general rel-
+ativity in recent years has been the discovery of criti-
+cal phenomena in gravitational collapse. For a variety
+of spherically symmetric imploding matter ﬁelds, there
+is a self-similar critical solution containing a naked sin-
+gularity which separates models which collapse to black
+holes from those which disperse [1–3]. Sometimes a dis-
+crete similarity is involved but, in other circumstances,
+the critical solution seems to be represented by a con-
+tinuously self-similar model.
+This is one which has a
+homothetic Killing vector and contains no dimensional
+constants. Perfect-ﬂuid models of this kind necessarily
+have an equation of state of the form p = αµ and so only
+in this case could the critical solution be homothetic.
+Self-similar spherically symmetric perfect-ﬂuid solu-
+tions have been much studied in general relativity (see [4]
+and references therein) and the attempt to understand
+critical phenomena has led to a several further studies
+[5–9]. However, their precise relationship with the critical
+solution has remained obscure. This is mainly because
+the full family of such solutions had not been identiﬁed
+∗E-mail: B.J.Carr@qmw.ac.uk
+†E-mail: aac@mscs.dal.ca
+‡E-mail: goliath@physto.se
+§E-mail: unilsson@mercator.math.uwaterloo.ca
+∗∗E-mail: uggla@physto.se
+when critical phenomena were ﬁrst discovered. However,
+recently Carr & Coley [10] have presented a complete
+asymptotic classiﬁcation of such solutions. Furthermore,
+by reformulating the ﬁeld equations for these models in
+terms of dynamical systems, Goliath et al. [11,12] have
+obtained a compact three-dimensional state space repre-
+sentation of the solutions and this leads to another com-
+plete picture of the solution space. These investigations
+have resulted in the discovery of a new class of ‘asymp-
+totically Minkowski’ self-similar spacetimes.
+In this paper we shall discuss these new solutions and
+show why they are intimately related to critical phenom-
+ena [5]. We thereby demonstrate for the ﬁrst time the
+global nature of the critical solution. Although the de-
+tailed derivation of these new solutions is given elsewhere,
+this is the ﬁrst published announcement of their existence
+and the ﬁrst attempt to link them to critical phenomena.
+The purpose of this paper is therefore to highlight this
+result in advance of the more extensive analyses (since
+these are in a much broader context). In particular, we
+will show how the global features relates to the equation
+of state parameter α and explain why there is only one
+such solution for each α. It should be emphasized that
+numerical studies of the critical solution are always re-
+stricted to some ﬁnite range of the self-similar variable z.
+However, as the critical index is approached, the extent
+of the self-similar region grows and one could in principle
+go to arbitrarily large values of z. This paper can there-
+fore be regarded as predicting the characteristics of these
+solutions.
+The discussion will mainly be in terms of the com-
+pact state space [11,12] but, to extract important physi-
+cal features, some of the quantities used by Carr & Coley
+[10] will be plotted. No equations will be used because
+the discussion is intended to be purely qualitative and
+thereby accessible to the general reader. However, some
+technical terms will be used in the next section, so we
+here give some background references. For an introduc-
+tion to dynamical systems theory in general relativity, see
+[13]; for its particular application in the spherically sym-
+metric context, see [11,12]; for more details of the other
+types of self-similar solutions, see Carr et al. [14]. At the
+end of the paper, we emphasize our key predictions, so
+that “critical” workers can investigate these.
+1
+
+## Page 2
+
+~M
+~M
+K
+C
+T
+H
+F
+C
+T
+H
+M
+M
+F
+K
+FIG. 1. The three-dimensional state space of self-similar
+spherically symmetric perfect-ﬂuid models for α > 1/5, ob-
+tained by matching a spatially self-similar region with two
+timelike self-similar regions along the lines H [14]. Labelled
+equilibrium points act as asymptotic states for orbits. The
+triangular surfaces indicated by dashed lines are sonic sur-
+faces. Two of these surfaces contain a sonic line, indicated by
+a line of equilibrium points.
+II. THE SOLUTION SPACE
+We shall focus on spherically symmetric self-similar
+solutions in which the spacetime admits a homothetic
+Killing vector. This means that all dimensionless vari-
+ables depend only on the self-similar variable z ≡r/t,
+where r is the comoving radial coordinate and t is the
+time coordinate. In a dynamical systems approach these
+solutions correspond to orbits in a three-dimensional
+compact state space.
+The state space of self-similar
+spherically symmetric perfect-ﬂuid models (for α > 1/5)
+is presented in Fig. 1. A point in this space corresponds
+to a certain geometry and matter ﬁeld conﬁguration on
+a homothetic (constant z) slice, while an orbit in the
+state space represents an entire spacetime. All continu-
+ous orbits are future and past asymptotic to one of a few
+solutions with higher symmetry. These appear as equi-
+librium points on the boundary of the state space and
+these points are labelled in Fig. 1. A physical descrip-
+tion of the solutions asymptotic to them is given in Table
+I.
+The state space is divided into two halves, one cor-
+responding to positive z, the other to negative z. This
+means that the solutions in one half are the time-reverse
+of solutions in the other half, so all equilibrium points ap-
+pear twice in Fig. 1. The sonic surfaces are also depicted
+and solutions generally develop a shock-wave here [15].
+However, in two of the sonic surfaces there is a sonic
+line and solutions which pass through this line can be
+extended continuously through the sonic surface. Only
+these solutions will be considered to be physical and the
+number of such solutions is strongly restricted.
+The state space has the advantage that it gives a pic-
+torial representation of the relationship between diﬀerent
+solutions and the connection between the initial and ﬁ-
+nal states, thereby yielding insights into the global nature
+Label
+Interpretation
+C
+Solutions with a regular center or
+inﬁnitely dispersed solutions
+M, ˜M
+Asymptotically Minkowski solutions
+K
+Non-isotropic singularity solutions
+F
+Asymptotically Friedmann solutions
+T
+Exact static solution
+TABLE I. Interpretation of solutions asymptotic to the
+given equilibrium points.
+of the solutions. However, it has the disadvantage that
+it is rather abstract. To better understand the physical
+aspects of the solutions, it is useful to consider some of
+the physically interesting quantities which arise in the co-
+moving approach. The dependence of these quantities on
+z corresponds to two-dimensional projections of orbits in
+the full state space. Following [10], we use: (1) the scale
+factor S, which ﬁxes the relation between the comoving
+radial coordinate r and the Schwarzschild radial coordi-
+nate R = Sr, this indicating when a solution expands
+inﬁnitely (S →∞) or encounters a singularity (S →0)
+for ﬁnite values of z; (2) the velocity V of the spheres
+of constant z relative to the ﬂuid, which is important for
+the identiﬁcation of event horizons (|V | = 1) and naked
+singularities, see [16]; (3) the density proﬁle µt2, which
+gives the matter distribution at a given comoving time t;
+and (4) the mass function 2m/R, where m(r) is the mass
+within radial coordinate r, this indicating the presence
+of an apparent horizon (2m/R = 1), see [17].
+We shall ﬁrst brieﬂy review the previously known fam-
+ilies of solutions. All of these solutions are discussed in
+more detail in [14], where the dependence of the above
+functions on z are shown explicitly. We shall then con-
+sider the new asymptotically Minkowski solutions. This
+is the ﬁrst discussion of their physical features and the
+ﬁrst detailed analysis of their relevance to critical phe-
+nomena.
+Asymptotically Friedmann solutions
+There are two one-parameter sets of solutions that are
+asymptotic to the ﬂat Friedmann solution, all of which
+are connected with one of the Friedmann points F. One
+has positive z and the other has negative z.
+Two
+qualitatively diﬀerent families can be distinguished: (1)
+expanding-recollapsing solutions (F–K orbits); and (2)
+ever-expanding (or ever-contracting) solutions (F–C or-
+bits), where C is to be interpreted as an inﬁnitely dis-
+persed state. The latter family contains the ﬂat Fried-
+mann solution itself. Thus the ﬂat Friedmann solution
+appears both as an equilibrium point F and as an orbit
+in state space, corresponding to diﬀerent slicings.
+Asymptotically quasi-static solutions
+For each value of α, there is a unique static solution,
+originally found by Tolman [18]. The corresponding (T–
+T) orbit traverses the entire state space and spans both
+2
+
+## Page 3
+
+positive and negative z.
+Furthermore, there is a two-
+parameter set of solutions with behavior resembling the
+static solution at large |z| (i.e. at early times).
+They
+are all associated with K points, corresponding to non-
+isotropic singularities. As with the asymptotically Fried-
+mann solutions, there are two diﬀerent families within
+this class: (1) expanding-recollapsing solutions (K–K or-
+bits); and (2) ever-expanding (or ever-contracting) so-
+lutions (K–C orbits).
+The latter contain the naked-
+singularity solutions discussed by Ori & Piran [16] and
+Foglizzo & Henriksen [19].
+Unlike the asymptotically
+Friedmann solutions, the asymptotically quasi-static so-
+lutions necessarily span both positive and negative z.
+Asymptotically Minkowski solutions
+When α > 1/5, solutions exist that are ‘asymptoti-
+cally Minkowski’, in the sense that the state-space or-
+bits asymptote to equilibrium points that correspond
+to Minkowski space. There are actually two subclasses
+of such solutions, associated with diﬀerent equilibrium
+points in state space: Class A solutions are connected
+with the M points and are described by two parameters.
+Class B solutions are connected with the ˜M points and
+are described by one parameter. Both of these subclasses
+contain two diﬀerent families of solutions: (1) singular so-
+lutions (K–M, K– ˜M orbits); and (2) regular solutions (C–
+M, C– ˜M orbits). Only the latter contain a sonic point.
+All these types of solutions are illustrated in Figs. 2 and
+3, where the arrows indicate whether solutions are future
+asymptotic to M or ˜M.
+Solutions in class A have V →1, S →∞, µt2 →0
+and 2m/R →0 at some ﬁnite value z = z∗. Although
+this limit is reached at ﬁnite z, it should be pointed out
+that most investigations of the critical solution use the
+physical distance R, which is inﬁnite. Examples of such
+solutions are illustrated by the dotted curves in Figs. 2
+and 3. Solutions in class B have V →V∗> 1, S →∞,
+µt2 →0 and 2m/R →0 as z →∞. Examples of these
+solutions are represented by the dashed curves in Figs.
+2 and 3. Both classes are asymptotically dispersive and
+solutions asymptotic to K points also have S →0 at a
+ﬁnite value of z, indicating the formation of a singularity
+in the past (assuming the time direction indicated in the
+ﬁgures). Even though 2m/R →0 for both classes, the
+mass m need not vanish.
+It should be emphasized that these solutions are not
+asymptotically ﬂat in the usual global sense, in which
+there is a certain radial decay of the curvature towards
+spatial inﬁnity, see, e.g., [20].
+We are not considering
+an isolated system here but rather a ﬂuid spacetime in
+which the Minkowski geometry is obtained asymptoti-
+cally along certain coordinate lines.
+It can be shown
+that the curvature vanishes asymptotically as the M ( ˜M)
+point is approached and r →∞(and hence t →∞). Be-
+cause the ﬂuid becomes inﬁnitely diluted, the situation
+is analogous to that of the open Friedmann solution, in
+which the Milne solution is approached asymptotically
+K
+M~
+H
+C
+M
+FIG. 2. Asymptotically Minkowski solutions of class A
+(dotted) and class B (dashed) as orbits in state space. Ar-
+rows go from C or K towards the inﬁnitely dispersed state.
+Densely dotted and short-dashed curves correspond to reg-
+ular solutions, while sparsely dotted and long-dashed curves
+correspond to singular solutions.
+S
+0
+-0.1
+0
+z
+z
+V
+0
+-1
+-0.1
+0
+z
+____
+2 m
+R
+z
+-0.1
+0
+0
+1
+µt2
+-0.1
+0
+0
+FIG. 3. Physical quantities for the asymptotically Min-
+kowski solutions. The dash-dotted line in the V (z) diagram
+corresponds to the sonic surface. Other designations are given
+in the caption of Fig. 2.
+along certain time-lines at late times (see, e.g., [13]).
+III. THE CRITICAL SOLUTION
+Critical phenomena in gravitational collapse were ﬁrst
+studied by Choptuik [1] and remain an active ﬁeld of
+research, see, e.g., [21] and references therein. The so-
+lution at the threshold of black-hole formation in spher-
+ically symmetric radiation ﬂuid collapse, corresponding
+to α = 1
+3, was studied by Evans & Coleman [5]. They
+found it to be a self-similar solution distinguished by the
+following criteria:
+(1) It is everywhere analytic, or at least C∞. In par-
+ticular it has a regular center, and also crosses the sonic
+surface in an analytic way.
+(2) It has a collapsing interior surrounded by an ex-
+panding exterior. This means that the radial ﬂuid three-
+3
+
+## Page 4
+
+velocity VR associated with a Schwarzschild foliation
+(which is diﬀerent from the function V ) has exactly one
+zero.
+Subsequently, other authors [7,8] have used these cri-
+teria to investigate the critical solution for other values
+of α. For a recent review, see [21].
+The uniqueness of the critical solution can be under-
+stood as follows: For each value of the equation-of-state
+parameter α, there exists a one-parameter set of solu-
+tions with a regular center and a one-parameter set of
+solutions analytic at the sonic line ( [4]). Thus it is not
+surprising that the ﬁrst condition leads to a discrete set
+of solutions. There is only one solution in this set that
+satisﬁes the second condition and this is the critical so-
+lution.
+We now examine the critical solution in terms of both
+the state space of the self-similar spherically symmetric
+perfect-ﬂuid solutions and the behavior of the various
+physical quantities. The results are summarized in Figs.
+4 and 5.
+Starting from the regular center C, a numerical inves-
+tigation shows that for all equations of state, the orbit
+of the critical solution passes through the sonic line and
+enters the spatially self-similar region (with |V | > 1). It
+turns out that for α in the range 0 < α ≲0.28, it is of the
+asymptotically quasi-static kind: it passes through the
+spatially self-similar region and enters a second timelike
+self-similar region, ﬁnally reaching another sonic point
+(indicated by ‘x’ in the ﬁgures), which is generally irreg-
+ular. However, this does not invalidate the solution as
+being the critical one, since the solution describing the
+inner collapsing region is usually matched to an asymp-
+totically ﬂat exterior geometry suﬃciently far from the
+center. An example of a solution belonging to this class
+is given by the full curves in Figs. 4 and 5.
+We ﬁnd that for the limiting case α ≈0.28, the crit-
+ical solution is an asymptotically Minkowski solution of
+class B, whose orbit ends at an equilibrium point ˜M. In
+Figs. 4 and 5, this solution corresponds to the dashed
+lines. For 0.28 ≲α < 1, we ﬁnd that the critical solu-
+tion belongs to the asymptotically Minkowski solutions
+of class A, whose orbit ends at an equilibrium point M. A
+solution representing this class is indicated by the dotted
+curves in Figs. 4 and 5.
+For α ≥α∗≈0.89, the investigations in [12,7,8] indi-
+cate that the critical solution is already irregular at the
+ﬁrst sonic point. As the matching must be performed
+outside the sonic point [16,19], the solution would then
+be unphysical. However, Neilsen & Choptuik [22] have
+recently demonstrated the existence of a regular critical
+solution for α ≥α∗as well. Our present investigation
+supports their analysis.
+To understand what happens for α = α∗, we consider
+equations of state near this value. It turns out that the
+behavior can be understood in terms of the stability near
+the sonic line. In order for a solution to be regular at the
+sonic surface, the corresponding orbit must approach the
+sonic line along one of (at most) two possible directions.
+H
+C
+C
+H
+M
+M~
+x
+FIG. 4. Critical orbits in the state space. Arrows go from
+the regular center towards the inﬁnitely dispersed state. Note
+that the orbits correspond to diﬀerent equations of state, i.e.,
+diﬀerent values of α, and thus belong to diﬀerent state spaces.
+The three orbits exemplify the cases 0 < α ≲0.28 (full curve),
+α ≈0.28 (dashed), and 0.28 ≲α < 1 (dotted).
+S
+x
+0
+0
+z
+V
+z0
+-1
+0
+1
+x
+____
+1
+R
+2 m
+0
+0z
+x
+µt2
+0
+0z
+x
+FIG. 5. Physical quantities for the critical solution. The
+dash-dotted lines in the V (z) diagram correspond to the sonic
+surfaces. Other designations are given in the caption of Fig.
+4. Note that for α ≳0.28 (dotted), the critical solution tends
+to a ﬁnite value of z.
+4
+
+## Page 5
+
+Each of these directions is associated with an eigenvalue
+– the direction corresponding to the smaller eigenvalue is
+called dominant and is associated with a one-parameter
+family of solutions (containing just one C∞solution),
+the other is called secondary and is associated with an
+isolated solution. For α < α∗, the critical solution cor-
+responds to the secondary direction. However, when α
+gets close to α∗, the eigenvalue associated with the crit-
+ical solution approaches that of the other direction. For
+α = α∗, the eigenvalues (and directions) are equal, cor-
+responding to a degenerate node, and for α > α∗, the
+critical solution is associated with the dominant direc-
+tion. Thus a transition from the secondary direction to
+the dominant direction occurs at α = α∗. This transition
+results in severe numerical diﬃculties, so very high nu-
+merical precision is required to investigate such solutions,
+as pointed out in [22].
+IV. CONCLUSIONS
+Our key predictions can be summarized as follows:
+(1) When one gets suﬃciently close to the critical so-
+lution that the large-z behavior can be studied, then this
+solution should have the various asymptotic features we
+predict for diﬀerent values of α.
+(2) There should be a sudden transition in the nature
+of the critical solution as α passes through 0.28, with the
+solution going from the asymptotically quasi-static form
+to asymptotically Minkowski form. However, it should
+be emphasized that the solution is only ﬂat towards null
+inﬁnity for α > 1/3, so one still needs to match to a
+non-self-similar region on a spacelike surface.
+(3) Although the asymptotically ﬂat limit is reached at
+ﬁnite z, most critical workers use the physical distance,
+which is inﬁnite. However, it should be pointed out that
+in the stiﬀcase (α = 1), the asymptotically ﬂat state is
+reached at ﬁnite physical distance, which should lead to
+some anomalies, see [10]).
+(4) Although we have not explained why the critical
+solution is analytic at the sonic point (this presumably
+relates to the usual stability criterion), we have used the
+asymptotic features to explain why the analytic solution
+is unique for given α. The relationship to solutions which
+are regular but not analytic at the sonic point is discussed
+in more detail by Carr & Henriksen [23].
+[1] M. W. Choptuik, Phys. Rev. Lett. 70, 9 (1993).
+[2] A. M. Abrahams and C. R. Evans, Phys. Rev. Lett. 70,
+2980 (1993).
+[3] M. W. Choptuik, in Deterministic chaos in general rel-
+ativity, eds. D. Hobill et al., Plenum Press, New York
+(1994).
+[4] B. J. Carr and A. A. Coley, Class. Quant. Grav. 16, R1
+(1999).
+[5] C. R. Evans and J. S. Coleman, Phys. Rev. Lett. 72,
+1782 (1994).
+[6] C. Gundlach, Phys. Rev. Lett. 75, 3214 (1995).
+[7] D. Maison, Phys. Lett. B 366, 82 (1996).
+[8] T. Koike, T. Hara, and S. Adachi, Phys. Rev. D 59,
+104008 (1999).
+[9] V. Frolov, Phys. Rev. D 56 6433 (1997).
+[10] B. J. Carr and A. A. Coley, “A complete classiﬁcation of
+spherically symmetric perfect ﬂuid similarity solutions”,
+preprint gr-qc/9901050 (1999).
+[11] M. Goliath, U. S. Nilsson, and C. Uggla, Class. Quant.
+Grav. 15, 167 (1998).
+[12] M. Goliath, U. S. Nilsson, and C. Uggla, Class. Quant.
+Grav. 15, 2841 (1998).
+[13] J. Wainwright and G. F. R. Ellis, dynamical systems
+in cosmology (Cambridge University Press, Cambridge,
+1997).
+[14] B. J. Carr, A. A. Coley, M. Goliath, U. S. Nilsson, and
+C. Uggla, preprint gr-qc/9902070 (1999).
+[15] M. E. Cahill and A. H. Taub, Commun. Math. Phys. 21,
+1 (1971).
+[16] A. Ori and T. Piran, Phys. Rev. D 42, 1068 (1990).
+[17] W. C. Hernandez and C. W. Misner, Astrophys. J. 143,
+452 (1966).
+[18] R. C. Tolman, Proc. Nat. Acad. Sci. 20, 169 (1934).
+[19] T. Foglizzo and R. N. Henriksen, Phys. Rev. D 48, 4645
+(1993).
+[20] R. Bartnik, Commun. Pure App. Math. 39, 661 (1986).
+[21] C. Gundlach, Adv. Theor. Math. Phys. 2, 1 (1998).
+[22] D. W. Neilsen and M. W. Choptuik, “Critical phenomena
+in perfect ﬂuids”, preprint gr-qc/9812053 (1998).
+[23] B. J. Carr and R. N. Henriksen, in preparation.
+5
+
+<!-- end chunk 1/1 | next: (none - last) -->
