@@ -63,6 +63,21 @@ def _PQ_at(Y, slp):
     return P, Q
 
 
+def _PQ_stack(ST):
+    """Vectorized P,Q builder over a stage array ST of shape (ns,8)=(N,A,om,V,Nx,Ax,ox,Vx).
+    Returns (P,Q) tensors of shape (4,4,ns) via one lambdify call per entry (numpy broadcast)."""
+    N, A, om, V, Nx, Ax, ox, Vx = [ST[:, j] for j in range(8)]
+    ns = len(N)
+    P = np.empty((4, 4, ns), complex); Q = np.empty((4, 4, ns), complex)
+    for i in range(4):
+        for j in range(4):
+            mp = _fP[i][j](N, A, om, V, Nx, Ax, ox, Vx)
+            mq = _fQ[i][j](N, A, om, V, Nx, Ax, ox, Vx)
+            P[i, j, :] = mp if np.ndim(mp) > 0 else np.full(ns, mp)
+            Q[i, j, :] = mq if np.ndim(mq) > 0 else np.full(ns, mq)
+    return P, Q
+
+
 def Lnum(Y, slp, k):
     P, Q = _PQ_at(Y, slp)
     return P + k*Q
@@ -74,22 +89,20 @@ def build_background(a2, z0, h, dm):
     slopes) AND the k-independent P,Q stage matrices, so per-k perturbation RK4 is pure numpy.
     Stop at the match shell x_m where (x_s - x)=dm, i.e. Dson=-(4/3)dm (just inside sonic)."""
     Y = C.center_seed(NC, a2, z0); x = math.log(z0)
-    stages = []            # each entry: 4 stage tuples (Y_stage, slp_stage)
+    S1 = []; S2 = []; S3 = []; S4 = []      # stage states (with slopes), plain floats
     Dtar = -DSON_SLOPE * dm
     prevD = C.Dson(Y[0], Y[3])
     n = int((3.0 - x) / h)
     i_m = None
-    Yseq = []
     for i in range(n):
-        k1 = bg_slopes(Y); Y1 = Y
+        k1 = bg_slopes(Y)
         Y2 = tuple(Y[j] + 0.5*h*k1[j] for j in range(4)); k2 = bg_slopes(Y2)
         Y3 = tuple(Y[j] + 0.5*h*k2[j] for j in range(4)); k3 = bg_slopes(Y3)
         Y4 = tuple(Y[j] + h*k3[j] for j in range(4));      k4 = bg_slopes(Y4)
-        stages.append(((Y1, k1), (Y2, k2), (Y3, k3), (Y4, k4)))
-        Yseq.append(Y1)
+        S1.append(Y + k1); S2.append(Y2 + k2); S3.append(Y3 + k3); S4.append(Y4 + k4)
         Ynext = tuple(Y[j] + (h/6)*(k1[j] + 2*k2[j] + 2*k3[j] + k4[j]) for j in range(4))
         Dnext = C.Dson(Ynext[0], Ynext[3])
-        # Dson rises from very negative (near center-side) toward 0 at the sonic point (x_s), staying
+        # Dson rises from very negative (center-side) toward 0 at the sonic point (x_s), staying
         # NEGATIVE just inside. Stop at the shell where D crosses Dtar=-(4/3)dm from below (D<0 side),
         # i.e. x_m sits a distance dm INSIDE the sonic point. Require V>0.05 (on the sonic branch).
         if Dnext < 0 and Dnext >= Dtar and prevD < Dtar and Ynext[3] > 0.05:
@@ -100,19 +113,16 @@ def build_background(a2, z0, h, dm):
     if i_m is None:
         return None
     ns = i_m
-    # precompute stage P,Q matrices (4 stages per step) as arrays (4,4,ns)
-    P = [np.empty((4, 4, ns), complex) for _ in range(4)]
-    Q = [np.empty((4, 4, ns), complex) for _ in range(4)]
-    for si in range(4):
-        for i in range(ns):
-            Ys, slp = stages[i][si]
-            Pm, Qm = _PQ_at(Ys, slp)
-            P[si][:, :, i] = Pm; Q[si][:, :, i] = Qm
+    A1 = np.array(S1[:ns]); A2a = np.array(S2[:ns]); A3 = np.array(S3[:ns]); A4 = np.array(S4[:ns])
+    # vectorized stage P,Q matrices (one lambdify call per entry per stage)
+    P1, Q1 = _PQ_stack(A1); P2, Q2 = _PQ_stack(A2a); P3, Q3 = _PQ_stack(A3); P4, Q4 = _PQ_stack(A4)
+    P = [P1, P2, P3, P4]; Q = [Q1, Q2, Q3, Q4]
     xm = math.log(z0) + ns * h
-    Dlast = C.Dson(Yseq[ns-1][0], Yseq[ns-1][3]) if ns >= 1 else None
+    Ylast = tuple(A1[ns-1, :4])
+    Dlast = C.Dson(Ylast[0], Ylast[3])
     return dict(P=P, Q=Q, i_m=ns, h=h, z0=z0, xm=xm, a2=a2, dm=dm,
-                Y0=stages[0][0][0], slp0=stages[0][0][1],
-                Ylast=Yseq[ns-1], Dlast=Dlast, Yseq=Yseq)
+                Y0=tuple(A1[0, :4]), slp0=tuple(A1[0, 4:8]),
+                Ylast=Ylast, Dlast=Dlast)
 
 
 _BG = {}
