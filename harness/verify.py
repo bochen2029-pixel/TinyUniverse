@@ -57,6 +57,10 @@ FIELD_GOLDENS = [
     # self-gravity (by the field) at the analytic free-fall time t_ff (v1 cloud/collapse
     # physics; the Madelung Q->0 limit). 128^3, ~6 s.
     ("field_cloudF",     [r"build\field_nexus.exe", "--scenario", "cloudF",     "--golden"]),
+    # mergerF = two-body weld cross-check: two self-gravitating psi-lumps attract under
+    # mutual gravity (separation shrinks ~2x) and form a denser remnant (v1 merger
+    # physics). Proves gravity BETWEEN distinct masses is real. 128^3, ~8 s.
+    ("field_mergerF",    [r"build\field_nexus.exe", "--scenario", "mergerF",    "--golden"]),
 ]
 
 def gpu_preflight(min_free_mb=2000):
