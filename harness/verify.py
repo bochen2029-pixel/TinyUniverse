@@ -10,6 +10,7 @@ VCVARS = r'"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary
 BUILDS = [
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo nexus\\tiny_nexus.cpp /Fe:build\\tiny_nexus.exe /Fo:build\\tiny_nexus.obj',
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\\substrate_nexus.cpp /Fe:build\\substrate_nexus.exe /Fo:build\\substrate_nexus.obj',
+    f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\\curve_nexus.cpp /Fe:build\\curve_nexus.exe /Fo:build\\curve_nexus.obj',   # v2 N3 (curve, CPU fp64)
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\tinyuniverse.exe app\\tinyuniverse.cu core\\lib\\envelope.cpp user32.lib gdi32.lib opengl32.lib cufft.lib',
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\field_nexus.exe substrate\\field_nexus.cu cufft.lib',   # v2 N1 (SP field)
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\lapse_nexus.exe substrate\\lapse_nexus.cu cufft.lib',   # v2 N2 (lapse/clock)
@@ -18,6 +19,12 @@ BUILDS = [
 CPU_GOLDENS = [
     ("nexus",           [r"build\tiny_nexus.exe", "--golden"]),
     ("substrate_nexus", [r"build\substrate_nexus.exe", "--golden"]),   # v2 N0 (spherical EKG)
+]
+# v2 N3 curve (geometry: geodesics through the weak-field metric -> exact-GR light bending +
+# precession). CPU fp64 geodesic oracle (no GPU) -> runs with the CPU oracles, no preflight.
+CURVE_GOLDENS = [
+    ("curve_deflect", [r"build\curve_nexus.exe", "--scenario", "deflect", "--golden"]),
+    ("curve_precess", [r"build\curve_nexus.exe", "--scenario", "precess", "--golden"]),
 ]
 GOLDENS = [
     ("kepler",    [r"build\tinyuniverse.exe", "--scenario", "kepler",    "--golden"]),
@@ -115,6 +122,7 @@ def main():
     t0 = time.time()
     print("[cpu] fp64 oracles (GPU-independent):")
     red = run_goldens(CPU_GOLDENS)              # nexus + substrate_nexus run under any contention
+    red += run_goldens(CURVE_GOLDENS)           # v2 N3 curve (CPU fp64 geodesic oracle) — GPU-independent
     gpu_ok = gpu_preflight()
     if gpu_ok:
         print("[gpu] v1 scenario goldens:")
@@ -123,7 +131,7 @@ def main():
         red += run_goldens(FIELD_GOLDENS)
         print("[gpu] v2 N2 lapse goldens:")
         red += run_goldens(LAPSE_GOLDENS)
-    n = len(CPU_GOLDENS) + ((len(GOLDENS) + len(FIELD_GOLDENS) + len(LAPSE_GOLDENS)) if gpu_ok else 0)
+    n = len(CPU_GOLDENS) + len(CURVE_GOLDENS) + ((len(GOLDENS) + len(FIELD_GOLDENS) + len(LAPSE_GOLDENS)) if gpu_ok else 0)
     print("-"*40)
     if not gpu_ok:                              # CPU oracles still reported; GPU suite deferred
         print(f"  CPU {'ALL GREEN' if red==0 else f'{red} RED'}; GPU goldens SKIPPED "

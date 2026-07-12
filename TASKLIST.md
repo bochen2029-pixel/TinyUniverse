@@ -106,8 +106,16 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(deferred → N3 `curve`, D-023)* the spatial metric — light bending, orbit precession, Shapiro delay (N2 is temporal-metric-only: exact redshift, no bent paths)
 - **Gate: MET** — clocks run slow in gravity wells, on the substrate; the redshift is exact Schwarzschild and the substrate's own gravity produces it (D-023).
 
-### N3–N4 (GPU, future — each gated against N0 + the 21 v1 goldens)
-- ☐ N3 `curve` (the lattice metric back-reacts — light bending, precession; fluid-CSS Stage-A as the static oracle; may reach precise γ) · ☐ N4 `star` (fusion closure + radiation + Ratchet lattice — the hydrogen-ball sentence)
+### N3 · `curve` — geometry curves ☑ **CLOSED 2026-07-12**
+- ☑ Contract `contracts/curve.contract.md` v1.0.0; tool `substrate/curve_nexus.cpp` (CPU fp64 geodesic oracle — no GPU, runs under any contention, like N0)
+- ☑ `curve_deflect` `4e6c33ca`: **light bends at exact GR 4GM/bc²** (0.3–0.75%) — the 1919 **factor of 2 decomposed**: the lapse (time, N2) gives 2GM/bc², the spatial curvature (N3) doubles it (full/lapse = 2.004–2.008 vs exactly 2)
+- ☑ `curve_precess` `67272705`: **perihelion precession** 0.72°/orbit vs exact GR 6πGM/(c²a(1−e²)) — **0.52%** (weak-field, leading 1PN)
+- ☑ `--selftest` (flat GM=0): straight ray + closed orbit. Harness rows added to the CPU-independent oracles (no GPU preflight); both goldens two-passed.
+- ☐ *(deferred → N4+, D-024)* a live GPU metric field a²(x) with dynamical back-reaction (energy density sourcing the metric each step); strong-field / higher-PN
+- **Gate: MET** — geometry curves: light bends at the exact GR angle (space curvature is the difference over N2), orbits precess at the GR rate (D-024).
+
+### N4 (GPU, future — gated against N0 + the 21 v1 goldens)
+- ☐ N4 `star` (fusion closure + radiation + Ratchet lattice — the hydrogen-ball sentence)
 
 ## Backlog (measured adoption only; each needs an honest baseline)
 - ☐ DLSS 4.5 via Streamline · ☐ RTXDI/ReSTIR emissive-particle lighting · ☐ NRD · ☐ Slang port of shared math (D-008) · ☐ UE 5.8 TextureShare showcase shell · ☐ MCP surface for scenario driving · ☐ df64 zoom ladder (D-010 gate)
