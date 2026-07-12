@@ -1,0 +1,384 @@
+<!-- ============ CHUNK 1/1 ============ -->
+<!-- source: EC94.pdf -->
+<!-- section: Page 1 -->
+
+## Page 1
+
+arXiv:gr-qc/9402041v1  23 Feb 1994
+Observation of Critical Phenomena and Self-Similarity
+in the Gravitational Collapse of Radiation Fluid
+Charles R. Evans and Jason S. Coleman
+Department of Physics and Astronomy
+University of North Carolina, Chapel Hill, North Carolina 27599
+(January 30, 2018)
+Abstract
+We observe critical phenomena in spherical collapse of radiation ﬂuid.
+A sequence of spacetimes S[η] is numerically computed, containing models
+(η ≪1) that adiabatically disperse and models (η ≫1) that form a black hole.
+Near the critical point (ηc), evolutions develop a self-similar region within
+which collapse is balanced by a strong, inward-moving rarefaction wave that
+holds m(r)/r constant as a function of a self-similar coordinate ξ. The self-
+similar solution is known and we show near-critical evolutions asymptotically
+approaching it. A critical exponent β ≃0.36 is found for supercritical (η > ηc)
+models.
+PACS numbers: 04.20.Dw, 04.25.Dm, 04.40.Nr, 04.70.Bw
+1
+
+## Page 2
+
+New solutions of Einstein’s equations at the threshold of black hole formation have re-
+cently been discovered. These solutions exhibit nonlinear dynamical behavior closely anal-
+ogous to critical phenomena, and include power-law behavior, discrete scaling relations and
+a form of universality. All of these features were discovered in Choptuik’s [1] studies of
+spherical collapse of massless scalar ﬁeld. Abrahams and Evans [2] found strikingly similar
+behavior in axisymmetric collapse of gravitational waves, indicating the behavior is a generic
+feature of gravity. Conﬁrmation has recently been made [3] of some of Choptuik’s results.
+In this Letter, we report observation of critical phenomena in spherical collapse of radiation
+ﬂuid and show the asymptotic approach of near-critical spacetimes to a self-similar solution
+near the center of collapse. This new result is fundamental in two ways; the self-similar
+solution has been separately and precisely calculated [4], and it exhibits local self-similarity.
+The process for ﬁnding the threshold of black hole formation and critical phenomena in
+gravitational collapse has been described elsewhere [1,2,5,6]. Adopting a physical model with
+metric g, matter ﬁelds φA, stress-energy T(φA), and symmetries, the future development is
+computed of elements of a family of Cauchy data, distinguished by a dimensionless strength-
+parameter η and a length (or mass) scale r0. Subcritical models (η ≪1) have smooth future
+development, dispersing all mass-energy to inﬁnity, while a black hole appears in supercritical
+models (η ≫1) with only some mass-energy escaping. As η is tuned in a search for the
+onset (at ηc) of black hole formation, black hole mass (for η > ηc) diminishes as a power law:
+MBH = K(η −ηc)β, with β > 0. In both scalar ﬁeld collapse [1] and vacuum collapse [2,5],
+simulations give β ≃0.37, results that appear to be universal (i.e., independent of the
+parameterization of the initial data).
+By implication, tuning the parameter to just the right value (η = ηc) creates arbitrarily
+small black holes and regions of arbitrarily high spacetime curvature from smooth Cauchy
+data. Hence, it is argued [6] that the threshold of black hole formation is also the threshold
+of naked singularity formation. Spacetimes with η = ηc are termed precisely critical.
+In any physical model, many families of Cauchy data may exist with a critical point and
+a precisely-critical spacetime. Each family of data will have a characteristic proper length
+2
+
+## Page 3
+
+scale r0. Related to this scale is the limiting interval, lim |T| = |T0|, as η−ηc →0+, of proper
+time T of the observer O centered in the collapse. Let T = −T0 correspond to the initial
+data. Further, let r be a proper spatial distance from O. The central region of collapse R
+(in spacetime) exists for r ≪r0, |T| ≪|T0|. Diﬀerent precisely-critical spacetimes can be
+normalized, using scale invariance, to a common length scale r0. These spacetimes will still
+diﬀer on scales T ∼−T0 and r ∼r0 but approach a (physical-model-speciﬁc but otherwise
+unique) self-similar solution within R. Within R, all knowledge of the initial data is lost up
+to a single, dimensional constant.
+Previous critical systems have displayed discrete self-similarities. Let q denote dimension
+and let length have q = 1. Allow the metric g to carry dimension q = 2 [7]. For η = ηc, within
+R a map will exist under which g →g′ = e−2∆g, for a ﬁxed value of ∆. These are echoes
+resulting purely from nonlinearities. The scale factors ∆are pure numbers that emerge from
+the dynamics, with e∆≃30 in scalar wave collapse [1] and e∆≃1.8 in gravitational wave
+collapse [2,5].
+An analytic explanation of these phenomena would be important. This has been sought
+for scalar ﬁeld collapse but the discrete self-similarity proved to be an impediment. The eﬀort
+made obvious, though, that a local self-similarity would be more powerful, and suggested
+examining another system: perfect ﬂuid collapse.
+Imagine a spherical conﬁguration of radiation ﬂuid conﬁned within areal radius r0. Let
+the total gravitational mass be M. Deﬁne a dimensionless control parameter η = 2M/r0 [8].
+When η ≪1, pressure dominates and should cause adiabatic expansion and dispersal of the
+ﬂuid. When η >∼1, gravity should overwhelm pressure and spur the formation of a black
+hole. The onset of black hole formation should occur at some ηc ∼1. One might anticipate,
+with a ﬂuid, that any self-similarity emerging near ηc will be local.
+A successful attempt was made to ﬁnd a self-similar solution representing the threshold
+of black hole formation in perfect ﬂuid collapse [4]. Details of this solution will be given
+elsewhere; here we only describe the self-similar ansatz and a few numerical results. We
+assume a perfect ﬂuid T µν = ρUµUν + pgµν, with total energy density ρ, isotropic pressure
+3
+
+## Page 4
+
+p and four-velocity Uµ satisfying UµUµ = −1. A relativistic equation of state p = (γ −1)ρ
+is adopted. In this paper, we specialize to radiation ﬂuid p = 1
+3ρ. Adopting (dynamical)
+Schwarzschild coordinates, the line element is
+ds2 = −α2dt2 + a2dr2 + r2dΩ2,
+(1)
+with α(r, t) the lapse function and a(r, t) the radial metric function.
+Constant proper
+sound speed cs =
+q
+p/ρ = √γ −1 suggests the self-similar ansatz: a(ξ), Ur(ξ), ρ(r, t) =
+Ω(ξ)/4πr2, α(r, t) = nrN(ξ)/t, with self-similar coordinate ξ = r/C(−t)n. Geometrically,
+w = (1/n)t∂/∂t+r∂/∂r is the inﬁnitesimal generator of the homothetic motion: £wg = 2g,
+£wT = 0. The similarity exponent n is initially unknown, making the problem (in these co-
+ordinates) a type-2 self-similarity [9]. With this ansatz, the ﬂuid and gravitational equations
+reduce to ordinary diﬀerential equations. These are solved by demanding regularity at ξ = 0
+(r = 0, t < 0), ξ = ∞(r > 0, t = 0), and along the limiting, ingoing acoustic characteristic
+(sonic point) at ξ = 1, across which the ﬂuid might otherwise be discontinuous. The system
+is over-determined unless n is taken as an eigenvalue of the nonlinear system. An analogous
+type-2 similarity problem is Guderley’s shock implosion problem [10].
+The similarity exponent was found to be n ≃1.1485 (γ = 4/3). The solution is depicted
+in Fig. 1. A physical singularity exists at r = 0, t = 0, since RµνRµν = 256
+3 π2ρ2 ∼T −4 and
+central proper time T ∼(−t)n. Notice that a does not approach unity as ξ →∞, but rather
+approaches a ≃1.07. Likewise, mass grows linearly with distance, with m(r)/r →0.0596
+and Ω→9.56 × 10−3, so the solution is not asymptotically ﬂat. An asymptotically-ﬂat
+spacetime would require truncating the self-similarity at some large r [11]. Nonetheless, the
+self-similar solution is anticipated to represent the asymptotic behavior within R (i.e., as
+r →0, t →0).
+To conﬁrm these expectations, we compute a series of models of spherically-symmetric
+collapse of radiation ﬂuid, searching for a critical point and critical behavior. We adopt
+polar time slicing and radial gauge, retaining the form (1) of the line element, and assume
+a radiation ﬂuid. We deﬁne W ≡αUt and U ≡aUr, with which the velocity normalization
+4
+
+## Page 5
+
+becomes W 2 = 1 + U2. Then, the equations of motion of the ﬂuid, ∇νT µν = 0, are
+∂
+∂t (aρW) + 1
+r2
+∂
+∂r
+
+r2αρU
+
++ p
+" ∂
+∂t (aW) + 1
+r2
+∂
+∂r
+
+r2αU
+#
+= 0,
+(2)
+∂
+∂t
+h
+a2(ρ + p)WU
+i
++ 1
+r2
+∂
+∂r
+h
+r2α a (ρ + p)U2i
++α a (ρ + p)
+
+W 2 1
+α
+∂α
+∂r −U2 1
+a
+∂a
+∂r
+!
++ α a ∂p
+∂r = 0,
+(3)
+and the pressure is p = 1
+3ρ. In these coordinates, the gravitational ﬁeld equations Grr =
+8πT rr and Gtt = 8πT tt become
+1
+a
+∂a
+∂r + 1
+2r
+
+a2 −1
+
+= 4πra2ρ
+h
+γW 2 −γ + 1
+i
+,
+(4)
+1
+α
+∂α
+∂r −1
+2r
+
+a2 −1
+
+= 4πra2ρ
+h
+γU2 + γ −1
+i
+,
+(5)
+with γ = 4/3 adopted in the models we discuss here.
+To construct a parameterized family of evolutions, we choose Cauchy data by specifying
+that the ﬂuid be instantaneously at rest V ≡U/W = 0 and have an energy density proﬁle
+ρ = 1
+2 π−3/2 r−2
+0 η exp(−r2/r2
+0),
+(6)
+parameterized by η and r0. The total gravitational mass is M = 1
+2ηr0, so that η = 2M/r0
+is a dimensionless measure of the strength of the initial gravitational ﬁeld, while r0 is the
+typical initial length scale. Equations (4) and (5) are solved to complete the Cauchy data.
+The dynamical behavior of these models is consistent with expectations. For γ = 4/3
+and this family of Cauchy data, the critical point is found in a bisecting search to be near
+ηc ≃1.0188.
+For η > ηc, the impending formation of a black hole is observed.
+As is
+well-known, polar time slices avoid penetrating regions of trapped surfaces [12] and asymp-
+totically approach the apparent horizon in collapsing spacetimes. When this occurs we have
+clear evidence of a black hole forming.
+Fig. 2 illustrates the form of the mass function
+5
+
+## Page 6
+
+m(r) = 1
+2r(1 −a−2) late in a supercritical evolution. The “kink” where r ≃2m(r) locates
+the surface of the black hole and determines the hole’s mass MBH. Immediately beyond the
+kink, m(r) is nearly constant indicating an evacuated region that forms around the black
+hole. At larger radii, additional mass is evident, representing the ﬂuid which did not collapse
+and is expanding outward.
+Black-hole mass MBH is found to be well described by a power law (see Fig. 3)
+MBH ≃K(η −ηc)β,
+(7)
+with a critical exponent β ≃0.36.
+This critical exponent value is numerically indistin-
+guishable from those found in scalar wave collapse [1] and gravitational wave collapse [2],
+doubtlessly reﬂecting a deep property of the gravitational ﬁeld equations.
+The ﬂuid is initially everywhere out of equilibrium. In near-critical models, the ﬂuid in
+the inner region collapses while that in the outer region accelerates and expands outward.
+The collapsing central region is chased by a strong, ingoing rarefaction wave. As the radius
+R(t) of the inner region diminishes, the rarefaction wave causes the mass to diminish also,
+keeping m(R(t))/R(t) nearly constant. The radius R(t) of transition between collapse and
+expansion (edge of the rarefaction wave) decreases by several orders of magnitude in very-
+near-critical models.
+On ﬁne scales, r ≪r0, the ﬂuid and gravitational ﬁeld assume a
+self-similar form (see Fig. 4). Furthermore, the self-similar form being approached is the
+locally self-similar solution outlined above. As Fig. 4 shows, ultimately the self-similarity
+of the collapse is broken if η ̸= ηc. Only a precisely-critical model would approach the self-
+similar solution and retain this dependence as r →0, t →0. Near- but not precisely-critical
+spacetimes develop a self-similar region on scales r ≪r0 but then lose self-similarity on a
+scale determined by proximity in parameter space to the critical point: r1 ≃K|η −ηc|β.
+Self-similarity will only be apparent if r1 ≪r0.
+Approach to self-similarity within a region spanning two disparate scales is a familiar
+concept in hydrodynamics termed “intermediate asymptotics” [13]. The cardinal example is
+the modiﬁed Sedov-Taylor blast wave problem. Besides the usual Sedov-Taylor parameters
+6
+
+## Page 7
+
+of E0, the blast wave energy, and ρ0, the ambient gas density, the modiﬁed problem has a
+length scale r0, within which the energy E0 is arbitrarily distributed initially, and has a small
+pressure p0 in the ambient gas. This small pressure introduces a second, new length scale:
+r1 = (E0/p0)1/3 ≫r0. These two additional dimensional parameters break the self-similarity
+of the blast wave on length scales r <∼r0 and r >∼r1 but on intermediate scales the solution
+asymptotically approaches the Sedov-Taylor self-similar form. There is a direct analogue in
+the behavior of near-critical spacetimes on scales between r0 and r1.
+The self-similar solution determines the asymptotic properties of precisely-critical evolu-
+tions. Linear stability analysis should reveal the perturbative response of solutions nearby
+ηc in parameter space and thereby perhaps provide an estimate of the critical exponent β.
+The self-similar solution, and therefore any precisely-critical evolution, apparently contains
+a naked singularity. However, the precisely-critical evolutions are likely to be a set of mea-
+sure zero as there is extreme sensitivity to the initial conditions near ηc. Furthermore, the
+dependence of the lapse along ξ = ∞(t = 0) is α ∼r1−1/n ∼r0.129, indicating the singularity
+to be shrouded in inﬁnite redshift.
+C.R.E. acknowledges helpful conversations with A. Abrahams, M. Choptuik, R. Price
+and J. York. This research was supported by NSF grants PHY 90-01645, PHY 90-57865
+and ASC 93-18152, which includes support from ARPA. C.R.E. thanks the Alfred P. Sloan
+Foundation for research support and thanks the Aspen Center for Physics for hospitality
+during summer 1993 where key aspects of this work were initiated. Computations were
+performed at the North Carolina Supercomputing Center.
+7
+
+## Page 8
+
+REFERENCES
+[1] M. W. Choptuik, Phys. Rev. Lett. 70, 9 (1993).
+[2] A. M. Abrahams and C. R. Evans, Phys. Rev. Lett. 70, 2980 (1993).
+[3] C. Gundlach, R. H. Price and J. Pullin, submitted to Phys. Rev. D (1993).
+[4] C. R. Evans, to be submitted to Phys. Rev. D (1993).
+[5] A. M. Abrahams and C. R. Evans, submitted to Phys. Rev. D (1993).
+[6] D. M. Eardley, in Texas/PASCOS 92: Relativistic Astrophysics and Particle Cosmology,
+eds. C. W. Akerlof and M. A. Srednicki (N. Y. Acad. Sci., New York), 1993.
+[7] D. M. Eardley, Commun. Math. Phys. 37, 287 (1974).
+[8] We use natural units in which G = c = 1.
+[9] L. I. Sedov, Similarity and Dimensional Methods in Mechanics, 10th Edition (CRC
+Press: Boca Raton), 1993. The self-similar solution described here may be equivalent
+to the ‘exploding’ models of Ref. [11].
+[10] G. Guderley, Luftfahrtforschung 19, 302 (1942). See also the discussion of this prob-
+lem in G. B. Whitham, Linear and Nonlinear Waves, (Wiley: New York), 1974. A
+spherically-symmetric imploding shock wave asymptotically approaches a self-similar
+form and “remembers” about the initial conditions only a single number related to the
+strength of the initiation of the shock.
+[11] A. Ori and T. Piran, Phys. Rev. D 42, 1068 (1990).
+[12] D. M. Eardley, talk at Numerical Astrophysics: A Symposium in Honor of James R. Wil-
+son, at the University of Illinois, 1982 (unpublished); See e.g., J. M. Bardeen and T.
+Piran, Phys. Rep. 96, 205 (1983); L. I. Petrich, S. L. Shapiro and S. A. Teukolsky, Phys.
+Rev. D 33, 2100 (1986); R. F. Stark and T. Piran, Phys. Rev. Lett. 55, 891 (1985).
+8
+
+## Page 9
+
+[13] G. I. Barenblatt and Ya. B. Zel’dovich, in Ann. Rev. Fluid Mech., 4, 285 (1972). See
+their discussion of the modiﬁed blast wave problem on p. 287.
+9
+
+## Page 10
+
+FIGURES
+FIG. 1. Self-similar radiation ﬂuid collapse.
+Fluid and metric variables are plotted versus
+self-similarity coordinate ξ = r/C(−t)n (with n ≃1.1485):
+(1) radial metric function a(ξ)
+(solid), (2) velocity V (ξ) = aU r/αU t (dotted), (3) Ω(ξ) = 4πr2ρ (dashed), and (4) lapse func-
+tion α = nrN(ξ)/t (dot-dashed). Note the collapsing interior and expanding exterior regions.
+FIG. 2. The mass function m(r) (solid) at a late time in a supercritical evolution. Polar time
+slices limit outside the horizon producing the kink near where the function approaches the curve
+(dotted) r = 2m(r), locating the surface of the black hole and determining the hole’s mass. At late
+times, the ﬂuid bifurcates and forms an evacuated region immediately beyond the hole, indicated
+by the decrease of Ω= 4πr2ρ (dashed) outside the hole. At larger radii, escaping ﬂuid expands
+outward.
+FIG. 3. Critical behavior of black hole mass. For η > ηc, MBH is determined and ﬁt to a power
+law of the form (8). Here log of MBH is plotted versus log of the critical separation η −ηc. The
+power-law ﬁt is indicated by the solid line and is determined by ηc = 1.018828234, K = 3.27, and
+β = 0.36. We obtain black holes with masses down to MBH ≃0.001MADM and the scaling law
+(8) is seen to hold over two orders of magnitude in mass. Simulations with discretization scales of
+3.3 × 10−3 and 1.0 × 10−3 are included in the plot, using open and ﬁlled circles, respectively.
+FIG. 4. Intermediate asymptotic approach of a near-critical evolution to self-similarity. The
+metric function a(r) (light curves) at a series of times, equally spaced in logarithm of central
+proper time τ = log(−T), obtained from a near-critical evolution. The rightmost curve is near
+the beginning of the simulation and resembles a(r) in the Cauchy data. As collapse proceeds, the
+peak of a(r) shifts to progressively smaller scales. The metric and ﬂuid approach the self-similar
+solution depicted in Fig. 1. The self-similar form of a(ξ) (see Fig. 1) is overlaid at τ = −0.5, clearly
+indicating approach to self-similarity. At later times, self-similarity is broken as a black hole begins
+to form and a →∞on the horizon.
+10
+
+## Page 11
+
+This figure "fig1-1.png" is available in "png"
+ format from:
+http://arxiv.org/ps/gr-qc/9402041v1
+
+## Page 12
+
+## Page 13
+
+This figure "fig1-2.png" is available in "png"
+ format from:
+http://arxiv.org/ps/gr-qc/9402041v1
+
+## Page 14
+
+## Page 15
+
+This figure "fig1-3.png" is available in "png"
+ format from:
+http://arxiv.org/ps/gr-qc/9402041v1
+
+## Page 16
+
+## Page 17
+
+This figure "fig1-4.png" is available in "png"
+ format from:
+http://arxiv.org/ps/gr-qc/9402041v1
+
+## Page 18
+
+<!-- end chunk 1/1 | next: (none - last) -->
