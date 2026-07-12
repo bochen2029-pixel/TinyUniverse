@@ -1,6 +1,8 @@
 # RUN_STATE.md
 
-**As of:** 2026-07-11 · **Milestone:** v2 **N0 `substrate_nexus` CLOSED** — the substrate ladder has its foundation stone. **State:** v1 complete (M0–M7); v2 track begun (D-020). **22/22 goldens GREEN** (~121 s): nexus + **substrate_nexus** (CPU fp64, no GPU) + 20 GPU. Contracts: + substrate_nexus v1.0.0 (8 → but v2 numbering). Harness now runs CPU oracles under any card contention.
+**As of:** 2026-07-12 · **Milestone:** v2 **N1 `field` — the PM+ψ gravity WELD demonstrated** (5/6 scenarios GREEN; on branch `substrate-gamma-tournament`). **State:** v1 complete (M0–M7); v2 N0 CLOSED; **v2 N1 in progress — the Schrödinger–Poisson substrate is real.** N1 fuses M6's split-step ψ + M2's PM cuFFT-Poisson into one loop; the fusion is proven by a self-bound SP soliton whose mass–radius product is scale-covariant to 3e-8 AND a real-time gravitational collapse at the free-fall time (both Madelung limits). Field goldens GREEN: freepacket `03dd3a3b`, sho3d `dfbc6185` (vs N5 exact), **soliton `d163d765` (the weld; two-passed)**, echoF `433ddcc8` (determinism receipt), cloudF `2308ea49` (classical collapse). galaxyF/mergerF (v1 rotation/entropy cross-checks) named future work (Q-N1-1). Tool `substrate/field_nexus.cu`; contract v1.0.1; D-022. **[Not yet merged to master — held on the tournament branch pending operator review; N0 line below is the last master milestone.]**
+
+**Prior (master):** v2 **N0 `substrate_nexus` CLOSED** — the substrate ladder's foundation stone. v1 complete (M0–M7); v2 track begun (D-020). **22/22 goldens GREEN** (~121 s): nexus + substrate_nexus (CPU fp64, no GPU) + 20 GPU. Harness runs CPU oracles under any card contention.
 
 ## What N0 established (v2 foundation stone; D-020/D-021)
 
