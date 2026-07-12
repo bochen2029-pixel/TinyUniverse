@@ -1,0 +1,11 @@
+# regenerable symbolic-operator caches (rebuilt by their generators):
+#   hka_pert_L.pkl                  <- hka_pert_derive.py
+#   hka_pert_firstprinc_coeffs.pkl  <- hka_pert_firstprinc.py (_build_symbolic)
+#   hka_pert_L_kha18.pkl / *_firstprinc.pkl <- one-off derivations
+#   fluid_sderiv.pkl                <- derive_linear.py
+*.pkl
+# python bytecode + scratch
+__pycache__/
+*.pyc
+_*.out
+_*.txt

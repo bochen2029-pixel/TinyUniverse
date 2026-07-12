@@ -11,11 +11,16 @@ KHA gr-qc/9503007; Evans–Coleman gr-qc/9402041) · **Target:** κ = 2.81055255
   to a real sonic point. All Stage-A invariants match analytic values to **machine precision**, with
   full convergence receipts. This **resolves the prior wall** (which had put the sonic point on the
   wrong branch V=+1/√3, lacked a regular center, and gave β≈0.99).
-- **STAGE B — NOT LANDED (precisely diagnosed).** The linear **perturbation operator** L(x;κ),
-  assembled from the transcribed HKA coefficients (5.5)–(5.13), **fails a rigorous gauge-mode
-  exactness gate** that any correct operator must pass. Consequently **no eigenvalue and no β are
-  reported from it** — per the honesty doctrine, a number that would be built on an unvalidated
-  operator is not emitted. The failure is localized to the equation level (below).
+- **STAGE B — NOT LANDED (precisely diagnosed).** SUPERSEDED by `STAGE_B_UPDATE.md` (v1: operator
+  CORRECTED via direct linearization → passes the gauge gate) and `STAGE_B_UPDATE_2.md`-content in
+  `STAGE_B_UPDATE.md` (this pass: robust eigenvalue solvers built). **Current honest state:** the
+  corrected, gauge-exact operator (`hka_pert_derive.py`) has correct center {−2,−1,0,0} and sonic
+  {0,0,0,1−2κ} indicial structure, but a **compound-matrix Evans function** (amplification-immune,
+  VALIDATED by cleanly finding the gauge mode at **κ=1**) shows it carries **NO physical eigenvalue near
+  κ=2.81** (|E(2.81)| is δ-robust on the baseline; a non-convergent FD-BVP "ghost" near 2.79 fails every
+  refinement test). Diagnosis: the operator is under-determined by **one** physical ∂_s coupling that the
+  gauge mode + indicial structure cannot fix and the available equation transcriptions do not pin down.
+  **No β emitted; none tuned.** The Stage-A section below remains valid and current.
 
 | gate | status | evidence |
 |---|---|---|
@@ -23,8 +28,10 @@ KHA gr-qc/9503007; Evans–Coleman gr-qc/9402041) · **Target:** κ = 2.81055255
 | Stage-A sonic = sound cone (4.5), constraint (4.2) | **PASS** | Dson=0, C(4.2)=0 identically |
 | Stage-A oi* convergence | **PASS** | oi*→3/8 to ~1e-11 across tol, launch depth, 3 integrators |
 | Stage-A sonic point vs HKA (4.7–4.9) | **PASS** | (A0,N0,om0,V0)=(3/2,2/√3,3/4,−1/√3) to 12 s.f. |
-| Stage-B perturbation-operator validity | **FAIL** | gauge mode (5.20) is NOT an exact solution of L |
-| Stage-B eigenvalue κ / β | **not evaluable** | operator not validated ⇒ no κ extracted, none faked |
+| Stage-B perturbation-operator gauge gate | **PASS** (v1 fix) | corrected operator: gauge residual ~1e-9, invariant in κ̄ (`hka_pert.py`, `hka_pert_derive.py`) |
+| Stage-B operator indicial structure | **PASS** | center {−2,−1,0,0}, sonic {0,0,0,1−2κ} exact |
+| Stage-B eigenvalue solver (Evans, validated) | **PASS on gauge / no physical** | κ=1 gauge found (\|E\| dip 4.4×); κ=2.81 NOT an eigenvalue (\|E\| δ-robust on baseline) |
+| Stage-B physical κ / β | **NOT REPRODUCED** | operator missing 1 ∂_s coupling ⇒ no physical mode; no κ/β emitted, none tuned |
 
 ---
 
@@ -167,5 +174,8 @@ against a scale-invariant gate; it is armed and waiting on a correct perturbatio
   gauge-mode gate. Next action: fix the perturbation κ-coupling (re-transcribe 5.5–5.10 from primary
   TeX, or re-derive ∂_s), re-run `hka_beta4.py`, discard κ≈0.357/1, report the physical κ.
 ```
-κ, β: NOT MEASURED (Stage-B operator unvalidated). Stage-A: oi*=3/8, sonic=(3/2,2/√3,3/4,−1/√3) EXACT.
+κ, β: NOT MEASURED convergently. Corrected operator is gauge-exact + correct indicial structure, but the
+      Evans function (validated on the κ=1 gauge mode) finds NO physical eigenvalue at κ=2.81 — the operator
+      is missing one physically-undetermined ∂_s coupling. See STAGE_B_UPDATE.md for the full five-method
+      diagnosis. Stage-A: oi*=3/8, sonic=(3/2,2/√3,3/4,−1/√3) EXACT. No β faked or tuned toward 0.35580192.
 ```
