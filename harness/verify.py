@@ -53,6 +53,10 @@ FIELD_GOLDENS = [
     # echoF = determinism receipt: time-reversal by conjugation (reversible to fp32
     # round-off) + byte-exact reproducibility. 128^3, ~2 s.
     ("field_echoF",      [r"build\field_nexus.exe", "--scenario", "echoF",      "--golden"]),
+    # cloudF = classical-limit weld cross-check: an overdense sphere collapses under
+    # self-gravity (by the field) at the analytic free-fall time t_ff (v1 cloud/collapse
+    # physics; the Madelung Q->0 limit). 128^3, ~6 s.
+    ("field_cloudF",     [r"build\field_nexus.exe", "--scenario", "cloudF",     "--golden"]),
 ]
 
 def gpu_preflight(min_free_mb=2000):

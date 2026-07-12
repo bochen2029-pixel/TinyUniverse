@@ -195,6 +195,24 @@ __global__ void kGauss3(cufftComplex* q, int FN, float gL, float dx,
     q[idx].y = env*sinf(ph);
 }
 
+// uniform-density sphere (radius R, tanh-smoothed edge over ~edge su), S=0 (at rest,
+// curl-free). psi = sqrt(rho). cloudF: the classical-limit collapse cross-check — an
+// overdense sphere infalls under self-gravity (irrotational -> maps exactly to psi).
+__global__ void kUniformSphere(cufftComplex* q, int FN, float gL, float dx,
+                               float R, float edge){
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int N3 = FN*FN*FN;
+    if (idx >= N3) return;
+    int ix = idx % FN, iy = (idx/FN) % FN, iz = idx/(FN*FN);
+    float x = -gL*0.5f + (ix + 0.5f)*dx;
+    float y = -gL*0.5f + (iy + 0.5f)*dx;
+    float z = -gL*0.5f + (iz + 0.5f)*dx;
+    float r = sqrtf(x*x + y*y + z*z);
+    float rho = 0.5f*(1.0f - tanhf((r - R)/edge));   // ~1 inside, ~0 outside
+    q[idx].x = sqrtf(fmaxf(rho, 0.0f));               // psi = sqrt(rho), phase 0
+    q[idx].y = 0.0f;
+}
+
 // kinetic phase (real time): psi <- e^{-i coef k^2} psi  (coef = hbar dt/(4m) half)
 __global__ void kPhaseK(cufftComplex* q, int FN, float gL, float coef){
     int idx = blockIdx.x*blockDim.x + threadIdx.x;
@@ -1057,6 +1075,83 @@ static Result runEchoF(const Dials& D, int gridReq){
 }
 
 // ============================================================================
+//  SCENARIO: cloudF — the CLASSICAL-LIMIT weld cross-check. An overdense uniform
+//  sphere (at rest, S=0 -> irrotational -> maps exactly to psi) infalls under its
+//  own self-gravity in REAL time (the v1 `cloud`/`collapse` physics, by the field).
+//  Gate: the sphere COLLAPSES (central density rises sharply) on the analytic
+//  free-fall timescale t_ff = sqrt(3 pi / (32 G rho0)) — a v1-farm/analytic
+//  cross-check that the fused loop does collisionless gravitational collapse
+//  (quantum pressure negligible at these scales -> the classical Q->0 limit).
+//  Reuses spStepReal (the real-time gravitating loop shared with echoF).
+// ============================================================================
+static Result runCloudF(const Dials& D, int gridReq){
+    Result R; R.scenario = "cloudF";
+    (void)gridReq;
+    const int    FN   = envI("FIELD_GRID", 128);
+    const double box  = envD("FIELD_BOX", 64.0);
+    const double Rsph = envD("FIELD_RSPH", 12.0);    // sphere radius (su)
+    const double Mtot = envD("FIELD_M1", 8000.0);    // cloud mass (collapses at t~t_ff)
+    const int    Nfwd = envI("FIELD_ITERS", 3000);   // reaches t/t_ff~1.1 (past the bounce)
+    const bool   diag = envB("FIELD_DIAG");
+    Grid g; g.FN = FN; g.gL = (float)box; gridAlloc(g, true);
+    R.gL = g.gL; R.grid = FN; R.steps = Nfwd;
+    dim3 b(256), gr = gridBlocks(g.N3, 256);
+    std::vector<cufftComplex> hbuf;
+    // uniform sphere psi=sqrt(rho), edge ~2 dx, normalized to mass Mtot
+    kUniformSphere<<<gr, b>>>(g.dQ, FN, g.gL, g.dx, (float)Rsph, (float)(2.0*g.dx));
+    renorm(g, hbuf);
+    { double mass = hostNormMass(g, hbuf); double sc = std::sqrt((Mtot/D.m)/mass);
+      kScale<<<gr, b>>>(g.dQ, g.N3, (float)sc); }
+    CUDA_CHECK(cudaDeviceSynchronize());
+    // initial peak density (mean over the sphere)
+    SigmaStat s0 = hostSigma(g, hbuf); R.mass0 = s0.mass*D.m; R.norm0 = s0.mass;
+    CoreRadii cr0 = hostCoreRadii(g, hbuf, s0);
+    double rho0 = 3.0*Mtot/(4.0*PI*Rsph*Rsph*Rsph);          // mean interior density
+    double t_ff = std::sqrt(3.0*PI/(32.0*D.G*rho0/D.m));       // free-fall time (rho as mass density)
+    R.E_exp = t_ff;                                           // report t_ff in a channel
+    // real-time gravitating evolution; track when rho_peak first exceeds 3x initial
+    float coefKhalf = (float)(D.hbar*D.dt/(4.0*D.m));
+    double rhoPk0 = cr0.rho_peak;
+    double tCollapse = -1.0; double rhoPkMax = rhoPk0;
+    int checkEvery = std::max(1, Nfwd/40);
+    for (int s = 0; s < Nfwd; s++){
+        spStepReal(D, g, coefKhalf);
+        if (s % checkEvery == 0 || s == Nfwd-1){
+            SigmaStat st = hostSigma(g, hbuf);
+            CoreRadii cr = hostCoreRadii(g, hbuf, st);
+            if (cr.rho_peak > rhoPkMax) rhoPkMax = cr.rho_peak;
+            if (tCollapse < 0 && cr.rho_peak > 3.0*rhoPk0) tCollapse = (s+1)*D.dt;
+            if (diag && (s % (checkEvery*4)==0 || s==Nfwd-1))
+                fprintf(stderr, "    [cloudF t=%.3f (t/t_ff=%.2f)] rho_peak=%.4e (x%.2f) r_c=%.4f\n",
+                        (s+1)*D.dt, (s+1)*D.dt/t_ff, cr.rho_peak, cr.rho_peak/rhoPk0, cr.r_c);
+        }
+    }
+    CUDA_CHECK(cudaDeviceSynchronize());
+    SigmaStat s1 = hostSigma(g, hbuf); R.mass1 = s1.mass*D.m; R.norm1 = s1.mass;
+    R.dmass_rel = std::fabs((s1.mass - s0.mass)/s0.mass);
+    CoreRadii cr1 = hostCoreRadii(g, hbuf, s1);
+    R.rc = cr1.r_c; R.rc2 = cr0.r_c;                          // final vs initial core radius
+    R.sigma_meas = rhoPkMax/rhoPk0;                          // peak density enhancement
+    R.sigma_exp  = tCollapse;                                 // measured collapse time
+    R.E_meas = (tCollapse>0)? tCollapse/t_ff : -1.0;         // collapse time in t_ff units
+    R.psi_b2b = capturePsiHash(g);
+    R.nan_free = std::isfinite(rhoPkMax) && (rhoPkMax>0);
+    // gate: collapse HAPPENED (peak density rose >=3x, core shrank) AND the collapse
+    // time is within [0.5, 3] t_ff (self-gravitating free-fall; the field bounces near
+    // t_ff, the classical collapse timescale). mass conserved (periodic + phase-only).
+    bool collapsed = (rhoPkMax >= 3.0*rhoPk0) && (cr1.r_c < cr0.r_c);
+    bool timing = (tCollapse > 0.4*t_ff) && (tCollapse < 3.0*t_ff);
+    R.gate_primary = collapsed && timing;
+    R.gate_norm = (R.dmass_rel < 5e-3);
+    R.gate_nan = R.nan_free;
+    R.verdict = R.gate_primary && R.gate_nan && R.gate_norm;
+    if (diag) fprintf(stderr, "  [cloudF] rho_peak x%.2f (gate>=3); t_collapse=%.3f t_ff=%.3f (t/t_ff=%.2f, gate 0.4-3); r_c %.3f->%.3f\n",
+                      rhoPkMax/rhoPk0, tCollapse, t_ff, (tCollapse>0?tCollapse/t_ff:-1), cr0.r_c, cr1.r_c);
+    gridFree(g);
+    return R;
+}
+
+// ============================================================================
 //  Declared JSON (hash domain: everything below; "notes" appended outside).
 //  Canonical order per contract: seed, params, result, gates, verdict.
 // ============================================================================
@@ -1098,6 +1193,12 @@ static std::string declaredJson(const Dials& D, uint64_t seed, const Result& R){
         s += ",\"echo_maxres\":" + fmt9(R.sigma_meas);
         s += ",\"hash_init\":\""  + R.echo_hash_init  + "\"";
         s += ",\"hash_final\":\"" + R.echo_hash_final + "\"";
+    } else if (R.scenario == "cloudF"){
+        s += ",\"rho_peak_enh\":" + fmt6(R.sigma_meas);      // peak-density enhancement
+        s += ",\"t_collapse\":"   + fmt6(R.sigma_exp);
+        s += ",\"t_ff\":"         + fmt6(R.E_exp);
+        s += ",\"t_collapse_over_tff\":" + fmt6(R.E_meas);
+        s += ",\"rc_init\":" + fmt6(R.rc2) + ",\"rc_final\":" + fmt6(R.rc);
     }
     s += ",\"nan_free\":" + std::string(R.nan_free ? "1" : "0");
     s += "},\"gates\":{";
@@ -1146,6 +1247,13 @@ static void printHuman(const Result& R){
         printf("    max |dpsi|           %.3e\n", R.sigma_meas);
         printf("    mass drift    %.3e   [gate < 1e-3]  %s\n", R.dmass_rel, R.gate_norm?"PASS":"FAIL");
         printf("    (declared golden hash reproduces byte-exact = the determinism receipt)\n");
+    } else if (R.scenario == "cloudF"){
+        printf("  gravitational collapse of an overdense sphere (the classical Q->0 limit):\n");
+        printf("    peak-density enhancement  x%.2f   [gate >= 3]  %s\n", R.sigma_meas, (R.sigma_meas>=3.0)?"PASS":"FAIL");
+        printf("    collapse time     %.4f   free-fall t_ff %.4f   t/t_ff = %.3f   [gate 0.4-3]\n",
+               R.sigma_exp, R.E_exp, R.E_meas);
+        printf("    core radius   %.4f -> %.4f (infall)\n", R.rc2, R.rc);
+        printf("    mass drift    %.3e   [gate < 5e-3]  %s\n", R.dmass_rel, R.gate_norm?"PASS":"FAIL");
     }
     printf("  nan_free      %s\n", R.nan_free?"yes":"NO");
     printf("-------------------------------------------------------\n");
@@ -1174,7 +1282,8 @@ static Result dispatch(const std::string& sc, const Dials& D, int grid){
     if (sc == "sho3d")      return runSho3d(D, grid);
     if (sc == "soliton")    return runSoliton(D, grid);
     if (sc == "echoF")      return runEchoF(D, grid);
-    fprintf(stderr, "error: unknown scenario '%s' (freepacket|sho3d|soliton|echoF)\n", sc.c_str());
+    if (sc == "cloudF")     return runCloudF(D, grid);
+    fprintf(stderr, "error: unknown scenario '%s' (freepacket|sho3d|soliton|echoF|cloudF)\n", sc.c_str());
     std::exit(2);
 }
 
@@ -1183,9 +1292,10 @@ static Result dispatch(const std::string& sc, const Dials& D, int grid){
 static size_t needBytes(const std::string& sc, int FN){
     if (sc == "soliton") FN = envI("FIELD_GRID", 256);   // soliton's real grid
     if (sc == "echoF")   FN = envI("FIELD_GRID", 128);   // echoF's real grid
+    if (sc == "cloudF")  FN = envI("FIELD_GRID", 128);   // cloudF's real grid
     size_t N3 = (size_t)FN*FN*FN;
     size_t c2c = N3*sizeof(cufftComplex)*3;             // psi + plan working set (~2x)
-    if (sc == "soliton" || sc == "echoF"){
+    if (sc == "soliton" || sc == "echoF" || sc == "cloudF"){
         size_t pois = N3*(sizeof(float) + sizeof(unsigned long long))
                     + (size_t)FN*FN*(FN/2+1)*sizeof(cufftComplex)*3;
         return c2c + pois;
