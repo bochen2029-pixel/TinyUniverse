@@ -141,6 +141,39 @@ static double rayDeflection(double GM, double c, double b, double K, double X0, 
     return std::fabs(std::atan2(ty, tx));   // turn angle from the +x axis
 }
 
+// Shapiro time delay: the excess coordinate light-travel time for a ray passing the
+// mass at impact parameter b, vs flat space. In the weak-field metric a light signal
+// travels with effective index n(r)=1+2GM/rc^2, so dt = n dl/c; the excess over flat
+// (n=1) is dt_excess = (1/c) integral (n-1) dl = (2GM/c^3) integral dl/r. Integrated
+// along the SAME RK4 ray path (full metric, K=2). Analytic (straight ray): (2GM/c^3)
+// * 2*asinh(X0/b) = (4GM/c^3) asinh(X0/b) ~ (4GM/c^3) ln(2 X0/b) -- the classic
+// Shapiro logarithm (Shapiro 1964, the 4th classical test of GR).
+static double rayShapiroDelay(double GM, double c, double b, double X0, long steps){
+    double x=-X0, y=b, tx=1.0, ty=0.0, delay=0.0;
+    double ds=(2.0*X0)/(double)steps, c2=c*c;
+    auto acc=[&](double x,double y,double tx,double ty,double& dtx,double& dty){
+        double r2=x*x+y*y,r=std::sqrt(r2),r3=r2*r;
+        double n=1.0+2.0*GM/(r*c2);
+        double gnx=-2.0*GM/(r3*c2)*x, gny=-2.0*GM/(r3*c2)*y;
+        double tg=tx*gnx+ty*gny; dtx=(gnx-tg*tx)/n; dty=(gny-tg*ty)/n;
+    };
+    for (long i=0;i<steps;i++){
+        double r=std::sqrt(x*x+y*y);
+        delay += (2.0*GM/(r*c2))*ds/c;     // (n-1) ds / c  (excess light-travel time)
+        double k1x=tx,k1y=ty,k1tx,k1ty; acc(x,y,tx,ty,k1tx,k1ty);
+        double k2tx,k2ty; acc(x+0.5*ds*k1x,y+0.5*ds*k1y,tx+0.5*ds*k1tx,ty+0.5*ds*k1ty,k2tx,k2ty);
+        double k2x=tx+0.5*ds*k1tx,k2y=ty+0.5*ds*k1ty;
+        double k3tx,k3ty; acc(x+0.5*ds*k2x,y+0.5*ds*k2y,tx+0.5*ds*k2tx,ty+0.5*ds*k2ty,k3tx,k3ty);
+        double k3x=tx+0.5*ds*k2tx,k3y=ty+0.5*ds*k2ty;
+        double k4tx,k4ty; acc(x+ds*k3x,y+ds*k3y,tx+ds*k3tx,ty+ds*k3ty,k4tx,k4ty);
+        double k4x=tx+ds*k3tx,k4y=ty+ds*k3ty;
+        x+=ds/6.0*(k1x+2*k2x+2*k3x+k4x); y+=ds/6.0*(k1y+2*k2y+2*k3y+k4y);
+        tx+=ds/6.0*(k1tx+2*k2tx+2*k3tx+k4tx); ty+=ds/6.0*(k1ty+2*k2ty+2*k3ty+k4ty);
+        double tn=std::sqrt(tx*tx+ty*ty); tx/=tn; ty/=tn;
+    }
+    return delay;
+}
+
 // Perihelion precession per orbit of a bound timelike geodesic, weak-field metric.
 // Orbit equation (1PN): u'' + u = GM/L^2 + (3GM/c^2) u^2, u=1/r, ' = d/dphi.
 // L^2 = GM a(1-e^2). Integrate phi from perihelion; the advance to the next
@@ -188,6 +221,8 @@ struct Result {
     // precess
     double a=0, e=0; long psteps=0;
     double pr_meas=0, pr_exact=0, pr_rel=0;
+    // shapiro
+    double sh_b=0, sh_delay_meas=0, sh_delay_exact=0, sh_delay_rel=0;
     bool nan_free=true, gate_primary=false, gate_secondary=false, gate_nan=false, verdict=false;
 };
 
@@ -204,11 +239,16 @@ static std::string declaredJson(const Dials& D, uint64_t seed, const Result& R){
         s += ",\"ratio_full_b1\":"  + fmt6(R.rf1) + ",\"ratio_lapse_b1\":" + fmt6(R.rl1);
         s += ",\"ratio_full_b2\":"  + fmt6(R.rf2) + ",\"ratio_lapse_b2\":" + fmt6(R.rl2);
         s += ",\"doubling_b1\":" + fmt6(R.doubling1) + ",\"doubling_b2\":" + fmt6(R.doubling2);
-    } else {
+    } else if (R.scenario == "precess") {
         s += ",\"a\":" + fmt6(R.a) + ",\"e\":" + fmt6(R.e) + ",\"steps\":" + std::to_string(R.psteps);
         s += "},\"result\":{";
         s += "\"precess_meas\":" + fmt9(R.pr_meas) + ",\"precess_exact\":" + fmt9(R.pr_exact);
         s += ",\"precess_rel\":" + fmt9(R.pr_rel);
+    } else {
+        s += ",\"b\":" + fmt6(R.sh_b) + ",\"X0\":" + fmt6(R.X0) + ",\"steps\":" + std::to_string(R.dsteps);
+        s += "},\"result\":{";
+        s += "\"delay_meas\":" + fmt9(R.sh_delay_meas) + ",\"delay_exact\":" + fmt9(R.sh_delay_exact);
+        s += ",\"delay_rel\":" + fmt9(R.sh_delay_rel);
     }
     s += ",\"nan_free\":" + std::string(R.nan_free?"1":"0");
     s += "},\"gates\":{\"primary\":" + std::string(R.gate_primary?"true":"false");
@@ -259,6 +299,23 @@ static Result runPrecess(const Dials& D){
     return R;
 }
 
+// Shapiro time delay — the 4th classical test of GR. Excess light-travel time past a mass.
+static Result runShapiro(const Dials& D){
+    Result R; R.scenario = "shapiro";
+    const double M = 1.0e5; R.GM = D.G*M; R.r_s = 2.0*R.GM/(D.c*D.c);
+    R.sh_b = 100.0; R.X0 = 5000.0; R.dsteps = 2000000;
+    double GM=R.GM, c=D.c, b=R.sh_b;
+    R.sh_delay_meas  = rayShapiroDelay(GM, c, b, R.X0, R.dsteps);
+    R.sh_delay_exact = (2.0*GM/(c*c*c)) * 2.0*std::asinh(R.X0/b);   // straight-ray line integral
+    R.sh_delay_rel   = std::fabs(R.sh_delay_meas/R.sh_delay_exact - 1.0);
+    R.nan_free = std::isfinite(R.sh_delay_meas);
+    R.gate_primary = (R.sh_delay_rel < 0.02);
+    R.gate_secondary = true;
+    R.gate_nan = R.nan_free;
+    R.verdict = R.gate_primary && R.gate_nan;
+    return R;
+}
+
 static void printHuman(const Result& R){
     printf("curve_nexus v1.0.0 - TINY UNIVERSE v2 N3 curve (geometry curves)\n");
     printf("scenario: %s   GM=%.3f  r_s=2GM/c^2=%.4f su\n", R.scenario.c_str(), R.GM, R.r_s);
@@ -270,11 +327,16 @@ static void printHuman(const Result& R){
         printf("    space DOUBLES the bending:  full/lapse = %.4f, %.4f  (GR: 2.0 exactly)\n", R.doubling1, R.doubling2);
         printf("    full = exact GR 4GM/bc^2      [gate |ratio-1|<0.02]  %s\n", R.gate_primary?"PASS":"FAIL");
         printf("    lapse = half (the N2 time part) [gate |ratio-1|<0.02]  %s\n", R.gate_secondary?"PASS":"FAIL");
-    } else {
+    } else if (R.scenario == "precess") {
         printf("  perihelion precession (a=%.0f, e=%.2f) vs exact GR 6*pi*GM/(c^2 a(1-e^2)):\n", R.a, R.e);
         printf("    measured  %.6e rad/orbit\n", R.pr_meas);
         printf("    exact GR  %.6e rad/orbit\n", R.pr_exact);
         printf("    rel error %.3e   [gate < 0.02]  %s\n", R.pr_rel, R.gate_primary?"PASS":"FAIL");
+    } else {
+        printf("  Shapiro time delay (b=%.0f, X0=%.0f) vs (2GM/c^3)*2*asinh(X0/b):\n", R.sh_b, R.X0);
+        printf("    measured  %.6e s (excess light-travel time)\n", R.sh_delay_meas);
+        printf("    exact GR  %.6e s\n", R.sh_delay_exact);
+        printf("    rel error %.3e   [gate < 0.02]  %s\n", R.sh_delay_rel, R.gate_primary?"PASS":"FAIL");
     }
     printf("  nan_free      %s\n", R.nan_free?"yes":"NO");
     printf("-------------------------------------------------------\n");
@@ -292,7 +354,7 @@ int main(int argc, char** argv){
         else if (a=="--golden") golden=true;
         else if (a=="--scenario" && i+1<argc) scenario=argv[++i];
         else if (a=="--seed" && i+1<argc) seed=strtoull(argv[++i],nullptr,10);
-        else { fprintf(stderr,"usage: curve_nexus --scenario deflect|precess [--seed N] [--json] [--golden] [--selftest]\n"); return 2; }
+        else { fprintf(stderr,"usage: curve_nexus --scenario deflect|precess|shapiro [--seed N] [--json] [--golden] [--selftest]\n"); return 2; }
     }
 
     if (selftest){
@@ -310,7 +372,8 @@ int main(int argc, char** argv){
     if (golden){ D = Dials(); seed = 20260711ull; }
 
     Result R = (scenario=="deflect") ? runDeflect(D) : (scenario=="precess") ? runPrecess(D)
-             : (fprintf(stderr,"error: unknown scenario '%s' (deflect|precess)\n", scenario.c_str()), std::exit(2), Result());
+             : (scenario=="shapiro") ? runShapiro(D)
+             : (fprintf(stderr,"error: unknown scenario '%s' (deflect|precess|shapiro)\n", scenario.c_str()), std::exit(2), Result());
     std::string declared = declaredJson(D, seed, R);
     std::string hash = blake2b::hash256_hex(declared);
 

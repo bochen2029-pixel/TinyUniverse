@@ -25,6 +25,7 @@ CPU_GOLDENS = [
 CURVE_GOLDENS = [
     ("curve_deflect", [r"build\curve_nexus.exe", "--scenario", "deflect", "--golden"]),
     ("curve_precess", [r"build\curve_nexus.exe", "--scenario", "precess", "--golden"]),
+    ("curve_shapiro", [r"build\curve_nexus.exe", "--scenario", "shapiro", "--golden"]),
 ]
 GOLDENS = [
     ("kepler",    [r"build\tinyuniverse.exe", "--scenario", "kepler",    "--golden"]),

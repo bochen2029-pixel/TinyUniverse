@@ -30,6 +30,7 @@ build\curve_nexus.exe --selftest                     # flat GM=0: straight ray, 
 |---|---|---|---|
 | **deflect** | light bends at exact GR 4GM/bc²; **space curvature doubles** the lapse-only bending | b=100/200: full ×1.008/1.003 of 4GM/bc²; lapse ×1.004/1.001 of 2GM/bc²; **full/lapse = 2.008/2.004** (GR: exactly 2) | `4e6c33ca` |
 | **precess** | orbits precess at the GR rate | a=1000, e=0.5: 0.72°/orbit vs 6πGM/(c²a(1−e²)), rel **5.2e-3** (weak-field, leading 1PN) | `67272705` |
+| **shapiro** | light is delayed passing the mass (the 4th classical test) | b=100: excess light-travel time vs (4GM/c³)asinh(X₀/b), rel **3.3e-3** | `20bfd4d2` |
 
 `--selftest` (flat, GM=0): straight ray (deflection 0), closed orbit (precession 1e-11). PASS.
 

@@ -45,6 +45,7 @@ RK4, a ray launched at (−X₀, b) with t̂=(1,0), integrated to x=+X₀ (X₀ 
 |---|---|---|---|
 | **deflect** | photon rays at b ∈ {100, 200} su through n_full and n_lapse (M=10⁵ → r_s=1; X₀=5000, RK4) | **`|Δφ_full·b·c²/(4GM) − 1| < 0.02`** AND **`|Δφ_lapse·b·c²/(2GM) − 1| < 0.02`** (both b) — the full metric bends by exact GR 4GM/bc²; the lapse alone by exactly half; **space curvature is the difference** | **analytic GR** Δφ = 4GM/(bc²) (full), 2GM/(bc²) (lapse-only). EXACT weak-field. |
 | **precess** | bound orbit a=1000, e=0.5 (p=a(1−e²)=750 ≫ r_s — the weak-field regime where the leading 1PN precession is the exact answer; 0.72°/orbit) integrated perihelion→perihelion | **`|Δϖ_meas/(6πGM/(c²·a(1−e²))) − 1| < 0.02`** | **analytic GR** perihelion precession 6πGM/(c²a(1−e²)). |
+| **shapiro** | a photon ray past the mass at b=100 (X₀=5000); accumulate the excess coordinate light-travel time (1/c)∫(n−1)dl along the geodesic | **`|Δt_meas/((2GM/c³)·2·asinh(X₀/b)) − 1| < 0.02`** | **analytic GR** Shapiro delay Δt = (4GM/c³)·asinh(X₀/b) ≈ (4GM/c³)ln(2X₀/b) — the **4th classical test** (Shapiro 1964). |
 
 **`--selftest` (flat):** GM=0 → n≡1 → the ray travels straight (Δφ < 1e-9) and the orbit closes (Δϖ < 1e-6). The no-gravity sanity + determinism smoke.
 
@@ -82,4 +83,5 @@ Declared body (canonical order): `seed, params{scenario, c, G, M, r_s, b/a/e, X0
 
 ## Changelog
 
+- v1.1.0 (2026-07-12) — added the **shapiro** scenario: the Shapiro time delay, the 4th classical test of GR. Excess light-travel time (1/c)∫(n−1)dl along the ray vs (4GM/c³)·asinh(X₀/b), matched to 0.33% (`curve_shapiro` `20bfd4d2`). With N2's gravitational redshift, all four classical tests of GR now pass on the substrate. The JSON declared-format is unchanged, so the deflect/precess goldens stay byte-identical (backward-compatible minor bump).
 - v1.0.0 (2026-07-12) — initial contract + build (operator directive: proceed N3+). The spatial metric: geodesic light deflection (4GM/bc², decomposed into the N2-lapse half + the N3-space half — the 1919 factor of 2) and perihelion precession (6πGM/c²a(1−e²)), vs exact GR. CPU fp64 geodesic oracle `substrate/curve_nexus.cpp`. Honest boundary: static weak-field geodesic oracle (the curvature observables), not a dynamical GPU metric field (that's N4+).
