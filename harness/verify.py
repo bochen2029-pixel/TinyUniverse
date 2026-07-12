@@ -11,6 +11,7 @@ BUILDS = [
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo nexus\\tiny_nexus.cpp /Fe:build\\tiny_nexus.exe /Fo:build\\tiny_nexus.obj',
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\\substrate_nexus.cpp /Fe:build\\substrate_nexus.exe /Fo:build\\substrate_nexus.obj',
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\tinyuniverse.exe app\\tinyuniverse.cu core\\lib\\envelope.cpp user32.lib gdi32.lib opengl32.lib cufft.lib',
+    f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\field_nexus.exe substrate\\field_nexus.cu cufft.lib',   # v2 N1 (SP field)
 ]
 # CPU fp64 oracles (no GPU) run regardless of card contention; GPU goldens follow the preflight.
 CPU_GOLDENS = [
@@ -38,6 +39,13 @@ GOLDENS = [
     ("circumnav", [r"build\tinyuniverse.exe", "--scenario", "circumnav", "--golden"]),
     ("expand",    [r"build\tinyuniverse.exe", "--scenario", "expand",    "--golden"]),
     ("bubbles",   [r"build\tinyuniverse.exe", "--scenario", "bubbles",   "--golden"]),
+]
+# v2 N1 field (Schrodinger-Poisson on a 3D lattice) — GPU goldens behind the same
+# preflight. freepacket/sho3d are oracle-grounded (vs nexus N5, exact); sho3d
+# re-runs 20k imaginary-time iters (~2 min). soliton (the weld) is added once frozen.
+FIELD_GOLDENS = [
+    ("field_freepacket", [r"build\field_nexus.exe", "--scenario", "freepacket", "--golden"]),
+    ("field_sho3d",      [r"build\field_nexus.exe", "--scenario", "sho3d",      "--golden"]),
 ]
 
 def gpu_preflight(min_free_mb=2000):
@@ -85,9 +93,11 @@ def main():
     red = run_goldens(CPU_GOLDENS)              # nexus + substrate_nexus run under any contention
     gpu_ok = gpu_preflight()
     if gpu_ok:
-        print("[gpu] scenario goldens:")
+        print("[gpu] v1 scenario goldens:")
         red += run_goldens(GOLDENS)
-    n = len(CPU_GOLDENS) + (len(GOLDENS) if gpu_ok else 0)
+        print("[gpu] v2 N1 field goldens:")
+        red += run_goldens(FIELD_GOLDENS)
+    n = len(CPU_GOLDENS) + ((len(GOLDENS) + len(FIELD_GOLDENS)) if gpu_ok else 0)
     print("-"*40)
     if not gpu_ok:                              # CPU oracles still reported; GPU suite deferred
         print(f"  CPU {'ALL GREEN' if red==0 else f'{red} RED'}; GPU goldens SKIPPED "
