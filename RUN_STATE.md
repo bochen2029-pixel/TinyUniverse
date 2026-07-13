@@ -4,7 +4,7 @@
 
 ## OPERATOR WORK QUEUE (set 2026-07-12, in priority order)
 
-1. **#3 · v1 polish** ← **IN PROGRESS.** a(t) little-planet timelapse video · GARGANTUA Kerr geodesic art pass · **2.5PN gravitational-wave inspiral** ✅ **DONE** (`nexus/inspiral_nexus.cpp`, Peters 1964 — circular merger time to 1.3e-13, eccentric a(e) circularization to 5e-11; goldens `2eba79de`/`4578d3ac`; D-025) · Q-006 (SR+1PN precession, the measured 6.41π vs claimed 7π).
+1. **#3 · v1 polish** ← **IN PROGRESS.** a(t) little-planet timelapse video · GARGANTUA Kerr geodesic art pass · **2.5PN gravitational-wave inspiral** ✅ **DONE** (`nexus/inspiral_nexus.cpp`, Peters 1964 — circular merger time to 1.3e-13, eccentric a(e) circularization to 5e-11; goldens `2eba79de`/`4578d3ac`; D-025) · Q-006 ✅ **DONE** (`nexus/precession_nexus.cpp`, D-026 — the **7π superposition is CORRECT**; the app's 6.41π was a normalization artifact, nominal vs force-distorted p; goldens `a0e180df`/`db0818f2`/`f9df648f`). **#3 remaining: a(t) timelapse video · Kerr art pass.**
 2. **#4 · crown research** — fluid-β Stage-B (the HKA perturbation ∂ₛ coupling) · scalar-γ = 0.374 (DSS, G97 gr-qc/9604019).
 3. **#2 · renderer (Axis B)** — R0 `interop` Vulkan⇄CUDA live window (NOTE: Vulkan SDK not installed — measured gate).
 4. **#1 · AMR contract** — the named future work that unlocks the Choptuik critical exponent (β/γ) for N0/N4.

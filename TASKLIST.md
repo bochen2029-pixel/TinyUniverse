@@ -44,7 +44,7 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☑ `clocks` golden `330c86a7`: τ_A/τ_B across a potential well to 6.3e-4 of analytic
 - ☑ `photons` golden `c4c565de`: GR factor-2 deflection to 0.83% over 46 impact parameters
 - ☑ All 8 prior goldens superseded + re-frozen (D-016, operator-signed) — **12/12 GREEN in 66 s**
-- ✖ 1PN field term — withdrawn after measurement (6.41π vs claimed 7π; Q-006); strong-field precession → M5 pseudo-potential oracles
+- ✖ 1PN field term — withdrawn (D-016); **Q-006 RESOLVED 2026-07-12** (`nexus/precession_nexus.cpp`, D-026): the superposition **π+6π=7π is CORRECT** (measured combined = 6.95π with the orbit's *actual* p); the app's 6.41π was a **normalization artifact** (nominal p=6.40 vs force-distorted p=6.90). The combined model still over-counts the correct GR 6π (= N3 `curve`), so its retirement stands. goldens `precession_sr`/`pn1`/`combined`
 - ◐ **2.5PN inspiral — the radiation-reaction PHYSICS is DONE** (`nexus/inspiral_nexus.cpp`, Peters 1964: circular merger time to 1.3e-13 + eccentric a(e) circularization to 5e-11; goldens `inspiral_circular` `2eba79de` / `inspiral_eccentric` `4578d3ac`; D-025). *Still deferred:* the app drag-term integration (so in-app binaries chirp) · Kepler-at-t_emit rendering
 - **Gate: MET** — relativistic kepler at the exact analytic rate; clocks desync as GR demands; light bends at the GR factor and does not age.
 
