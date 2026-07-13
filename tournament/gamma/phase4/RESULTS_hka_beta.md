@@ -229,3 +229,53 @@ So the correct operator is **`L = M_x⁻¹ (Gmat − κ M_s)`** — the fluid ro
 **Verified (`hka_pert_hka99.py`, the authoritative operator):** the gauge-mode exactness gate now passes to **machine precision — `|res|/|Ψ_g| ≈ 1e-10` for every κ̄ ∈ {0.357, 1.0, 2.81}**, at every x. The κ¹ gauge condition `E2 = As·ω̄_x + Bs·V_x`, `F2 = Cs·ω̄_x + Ds·V_x` holds to ~1e-15 on the background (it is the background Eq 3/4). **This is the wall broken** — the exact thing that blocked the overnight run and session-2's first pass.
 
 **Remaining: the eigenvalue extraction (β = 1/Re κ₀, κ₀≈2.81055255).** The paper (Table I) confirms γ=4/3 → κ=2.81055255, β=0.35580192, unique relevant mode. Getting κ from the *correct* operator is now a standard-but-delicate singular-BVP shoot (regular-singular sonic point + stiff center; mode collapse under long integration). The prior `hka_beta4` match machinery (calibrated for the wrong operator) is too noisy; a robust BVP eigensolver (spectral collocation / orthonormalized shoot / `solve_bvp`) on the verified `hka_pert_hka99.Lnum` is the clean next step. Tools: `hka_pert_hka99.py` (operator, GATE-VERIFIED), `hka_beta_solve.py` (shoot scaffold). β still withheld until κ lands + G-UNIQUE/G-CONVERGE fire — the machine is armed on a correct operator for the first time.
+
+---
+
+## UPDATE 2026-07-13 (session 3) — the sonic Frobenius is REBUILT + EXACT; **but κ=2.81 is ABSENT from the operator** (the wall moves from numerics to the operator)
+
+Two results this session, one constructive and one a hard, triangulated negative that **redirects the whole β effort**.
+
+### A · The sonic analytic machinery was rebuilt from scratch and is now EXACT (the §5a step-1 deliverable — DONE)
+
+The prior Frobenius/Laurent path was poisoned by `hka_pert_sonic.bg_series_near_sonic`: a one-sided `np.polyfit` of the **singular resolved ODE** sampled right against the sonic point → the residue μ was never pinned (three disagreeing values −4.48/+10.5/−4.62). Rebuilt analytically:
+
+- **`nr_sonic.py`** — EXACT background sonic Taylor series `(A,N,ω,V)(t)`, `t=x−x_s`, by an order-by-order power-series recursion. **Key structural finding:** the order-1 fluid solvability is **quadratic** in the null-coefficient α₁ (two analytic branches through the sonic point — `M₁·w₁` is a product of two α₁-linear factors); the Evans–Coleman branch is selected via the desingularized-flow eigenvector (`hka_desing`). Orders ≥2 are linear. **Validated reference-free**: ODE residual ~1e-15 at low order; matches the cleanly-integrated EC background to **3.7e-11 at t=−0.02**. (radius ≈0.12 → match inside |t|≤0.05.)
+- **`nr_laurent.py`** — EXACT Laurent `L(t)=M_x⁻¹(Gmat−κM_s)=R/t+L₀+L₁t+…` by power-series arithmetic (no DFT). **Residue reconciled: the indicial exponent μ = 1−2κ EXACTLY** (−4.621105 for κ=2.81; −1.0 for κ=1; +0.286 for κ=0.357) — the −4.62 "expectation" was right; the DFT/polyfit were artifacts. All **3 analytic modes** (ker R, clean rank-1) now recovered; they solve the **direct operator ODE** to **9.8e-14 at t_m=−0.02**, 2.9e-10 at t_m=−0.03. **The Frobenius GATE the continuation prompt asked for PASSES.**
+
+This fixes the exact inaccuracy the prior session named as the root blocker. It is banked (`nr_sonic`, `nr_laurent`, `nr_frob`) and reusable.
+
+### B · With the exact machinery, HKA's OWN eigenvalue method finds ONLY the gauge mode — **κ=2.81 is not there**
+
+`rflanl.tex` §V (read verbatim, 5.216–5.463) gives HKA's exact BVP + numerical method: construct the **unique** analytic-at-sonic solution (a₀∈ker R, + the identity eq:alg-PP, + gauge **N̄_p(0)=0**, normalized by Ā_p(0)=1 → 1 param κ), integrate **sonic→center**, and require the single expanding center mode `(0,0,0,1)e^{−2x}` (pure V_p) to vanish (eq:PPasmp1). +∞ is automatically bounded for Re κ>0 (not an extra condition). Implemented faithfully in **`nr_shoot.py`** with the exact Frobenius sonic data and the **verified identity** (`idc·Ψ_gauge ≈ 1e-16` at all x, both κ — the identity is correct).
+
+**Result (six independent methods agree — β NOT measured, none faked):**
+
+| method | finds gauge κ=1 | finds physical κ=2.81 |
+|---|---|---|
+| `nr_shoot` sonic→center, 4-D (accurate Frobenius) | ✅ dip (|y|≈9) | ❌ none |
+| `nr_shoot` reduced-3D (identity built in, no drift) | ✅ **log\|y\|=0.0** (razor-clean) | ❌ none |
+| `hka_beta_solve` sonic→center (old polyfit Frobenius) | — | ❌ monotonic, no min |
+| `hka_beta_match` reduced-3D 2×2 determinant | ✅ sign-change | ❌ det explodes monotonically |
+| `nr_evans2` two-sided Evans (gauge-removed) | (n/a) | ❌ flat \|E\|≈0.7 |
+| complex-κ scan (Re∈[2.6,3.0], Im∈[0,2.5]) | — | ❌ flat log\|y\|≈11.5 |
+
+Comprehensive real scan **κ∈[−1.5, 12]** (HKA's own search range Re κ≥−1.5): the **only** eigenvalue is the gauge mode at **κ=1** (= −N̄_x(x_s) = −(−1); the gauge-fixed gauge mode). The growing-mode coefficient is smooth and sign-consistent through 2.81 with **no zero crossing**; no scaled/complex sibling of 2.81 exists in range.
+
+**Independent structural checks on the operator all PASS** yet the physical mode is absent: gauge-mode gate (1e-10), **center indicial = {−1,0,0,−2}** (matches eq:PPasmp1 exactly), **sonic indicial = 1−2κ** (exact). So the gauge gate is **necessary but NOT sufficient**.
+
+### C · Conclusion + redirect (honest, RAYFORMER-style)
+
+**The bottleneck is not the sonic-point numerics** (now exact, gated) — it is **upstream**: the verified-by-gauge-gate operator `hka_pert_hka99` does **not possess the known physical relevant eigenmode** via HKA's own method. The most likely cause is a **residual error in an operator coefficient** that annihilates the gauge mode and preserves the leading indicial exponents (hence invisible to every check run so far) but shifts/removes the physical spectrum — a class of error the M_x≠I fix (D-029) plausibly did not fully clear. (A subtle background/identity inconsistency is less likely: Stage-A is machine-precision and `idc·Ψ_g≈1e-16`.)
+
+**Next effort (well-scoped):** verify the operator *beyond the gauge mode*.
+1. Find a **second independent operator test** (e.g., derive eq:alg-PP as a first integral **from** `L` and check self-consistency of every row; or verify each `M_s`/`E`/`F` coefficient against a fresh linearization of the primary KHA95 EOM keeping ∂_s).
+2. **Coefficient sensitivity**: the gauge gate fixes only the combinations `E2=As·ω̄_x+Bs·V_x`, `F2=Cs·ω̄_x+Ds·V_x`; the *individual* `As,Bs,Cs,Ds` (and `E3,F3` etc., which vanish on the gauge mode's structure) are under-constrained by the gauge gate. Re-transcribe/re-derive these specifically and re-run `nr_shoot` — the κ=2.81 dip should appear once the operator is right.
+3. Only after κ=2.81 lands: port to `fluidcss_nexus.cpp` Stage-B, freeze the β golden.
+
+**The scaffolds are all in place and validated** (`nr_shoot.py` is the clean eigenvalue reader; it correctly resolves the gauge mode to log|y|=0). The moment the operator is corrected, β falls out with no further numerical work.
+
+```
+κ, β: STILL NOT MEASURED, none faked. Sonic Frobenius: EXACT (μ=1−2κ, gate 9.8e-14).
+Finding: operator lacks the physical κ=2.81 eigenmode (6 methods); wall moved numerics → operator.
+```
