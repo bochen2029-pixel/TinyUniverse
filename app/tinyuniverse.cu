@@ -2801,6 +2801,7 @@ int main(int argc, char** argv){
         else if (a == "--el" && i+1 < argc)     gShotEl = (float)atof(argv[++i]);
         else if (a == "--dist" && i+1 < argc)   gShotDist = (float)atof(argv[++i]);
         else if (a == "--ev" && i+1 < argc)     gEvOffset = (float)atof(argv[++i]);
+        else if (a == "--nohud")                gHud = 0;          // clean render (non-declared)
         else if (a == "--bench" && i+1 < argc)  benchFrames = atoi(argv[++i]);
         else if (a == "--shot" && i+1 < argc)   shotPath = argv[++i];
         else if (a == "--frames" && i+1 < argc) shotFrames = atoi(argv[++i]);
