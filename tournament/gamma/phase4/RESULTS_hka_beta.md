@@ -198,6 +198,18 @@ With the **verified** operator (`hka_pert_hka99.Lnum`, gauge gate 1e-10), the re
 
 **Honest state (D-016/D-021):** β STILL NOT MEASURED, none faked. **The operator is the hard scientific crux and it is DONE + verified.** The eigenvalue is a bounded numerical-methods task on a correct operator — the machinery (reduced-3D + identity + Frobenius) is built and characterized; only the sonic-point analytic-continuation step remains. Scaffolds: `hka_beta_match.py` (reduced-3D, best), `hka_beta_spec.py` (spectral), `hka_beta_bvp.py` (collocation), `hka_beta_solve.py`, `hka_beta_validate.py`, `hka_beta_eigfn.py`.
 
+### 2026-07-13 (cont.) — the matched-shoot attempt + the definitive diagnosis (polar-areal Frobenius is a dead end for the new operator)
+
+Attempted the precise matched shoot (`det[c1|c2|v_sonic]` at a point outside the singular region but inside the Frobenius radius). It **cannot work as built**, because the sonic **Frobenius machinery is inaccurate for the correct operator**:
+- **The physical Frobenius series has O(1)–O(100) ODE-residual at every |t| (0.05→0.20), worsening with order** — it is not a usable solution of the ODE anywhere. Root: `hka_pert_sonic.bg_series_near_sonic` fits the background near the sonic point with a **low-order polyfit of sampled points**, and `L_laurent`'s DFT then inherits that error.
+- **The residue R (indicial exponent) is not even pinned down:** DFT `L_laurent` → μ≈−4.48; an analytic `R = (1/d′)·adj(fluid-block)·(Gmat−κM_s)` → μ≈+10.5; the old-code "expectation" was 1−2κ=−4.62. Three different values ⇒ the sonic expansion must be **rebuilt from scratch** (exact background sonic Taylor series from the desingularized flow, exact Laurent) before any Frobenius/matched-shoot can be trusted — and even then the small radius (<0.3) + the +7/singular amplification make the polar-areal shoot delicate.
+
+**Definitive conclusion:** the polar-areal ODE-shooting/collocation route to β is a **dead end without a full rebuild of the sonic analytic-expansion machinery**, and remains delicate even then. **The robust path is a different method, both standard in the literature:**
+1. **The Lyapunov / time-evolution method** (HKA §V's *own* "second method", called "very regular"): evolve the linearized `(s,x)` PDE — fluid `(ω̄,V)` evolve in `s` via `[[As,Bs],[Cs,Ds]]⁻¹`, metric `(Ā,N̄)` from the spatial constraints (`∂_xĀ=G·Ψ`, `∂_xN̄=H·Ψ`) — from generic data; the dominant growth rate is Re κ ⇒ β. Avoids the sonic ODE eigenvalue entirely. **Recommended.**
+2. **Double-null / CSS-similarity reformulation** (tournament F1): re-derive the operator in coordinates where the self-similar solution is smooth-on-grid.
+
+Either is a focused, dedicated implementation on the **already-verified operator** (`hka_pert_hka99.py`). β is withheld; the operator crank stands.
+
 **Honest state (D-016/D-021).** κ, β: STILL NOT MEASURED, none faked. Stage-A golden `fluidcss_stageA` stands. Two independent operators now fail the gauge gate (transcribed: worst at sonic; primary-EOM: worst at center) — the wall is real and localized, not a tuning problem. `β` is withheld until an operator passes `hka_pert.py`'s gauge-mode gate.
 
 ---
