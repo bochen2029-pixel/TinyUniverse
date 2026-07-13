@@ -182,6 +182,22 @@ against a scale-invariant gate; it is armed and waiting on a correct perturbatio
 
 **Cleanest unblock (next attempt):** (1) **fetch gr-qc/9607010 and transcribe §V** (the explicit perturbation coefficients) → drop into `hka_pert_primary`/`hka_pert_core` → the gate should pass; OR (2) finish the primary-EOM derivation's near-center (Ā,N̄) coupling (the residual localized above). Then the already-built, validated match determinant `hka_beta4.Delta` reads κ (discard the gauge modes κ≈0.35699/1 per HKA fn15) → β=1/Re κ.
 
+**DONE (session 2, cont.):** unblock (1) executed — gr-qc/9607010 fetched, §V transcribed, and the operator CRACKED (M_x≠I assembly; gauge gate → 1e-10, `hka_pert_hka99.py`). See the section below for the eigenvalue-extraction state.
+
+---
+
+## UPDATE 2026-07-13 — eigenvalue extraction: correct machinery built, blocked at the sonic-point numerics (β not yet landed, none faked)
+
+With the **verified** operator (`hka_pert_hka99.Lnum`, gauge gate 1e-10), the remaining task is to extract κ₀≈2.81055255 (→ β=0.35580192). This is the *known-hard* part of critical-collapse — the sonic point is a **regular singular point** and the extraction is delicate (HKA/Maison/Gundlach each engineered specific techniques). Eight formulations were built and run; all correctly recover the **gauge mode** but the **physical mode is masked**. Precise findings, all measured:
+
+- **The algebraic identity (eq:alg-PP / eq:EOM-eigenmodes.2) is NOT preserved by the 4-row ODE** (measured: an identity-exact vector drifts to 24% off-identity by x≈−2). The paper uses it "as a check," but the physical solutions are the 3-D subspace satisfying it. ⇒ any 4-row shoot/collocation admits identity-violating modes and **misses the physical one**. Confirmed: 4-D `solve_bvp` and 4-D Chebyshev spectral find only {−1.67, −0.40, 0.994} — the **gauge mode at κ≈0.994** (in this background's gauge, where N̄_p(x_s)=0 ⇒ κ=−N̄′(x_s)≈1), never 2.81.
+- **Fix — the identity-reduced 3-D system** (`Ā_p` eliminated via eq:alg-PP; `hka_beta_match.py::L3`): identity built in, no drift. Its center indicial exponents are correct ({−2,0,0}); **but near the sonic point it has a violent positive eigenvalue (+7.4 at x=−0.5, larger toward x_s)**. Backward integration (sonic→center) blows up ~1e57 (Frobenius truncation excites the +7 mode); forward integration (center→sonic) is stable in the bulk but the match determinant **explodes to −1e5 in the physical κ band**, swamping the eigenvalue zero. The reduced-3D forward 2×2 match determinant cleanly shows the **gauge sign-change at κ≈1.0**, but no resolvable zero near 2.81.
+- **Correctly built + validated pieces:** the physical sonic leading coefficient `a₀=(Ā=1, N̄=0, ω̄=0.014, V=−0.76)` (3×3 solve: Ā₀=1 norm + gauge N̄₀=0 + identity=0, cond≈10, identity residual 2e-16, κ-dependent) — `hka_beta_solve.py::v_sonic`/`hka_beta_match.py`; the Frobenius analytic sonic modes (`ker(R)`, 3-D, indicial {0,0,0,−4.48}); the sonic solvability BC (fluid-block left-null `(Cx,−Ax)`).
+
+**Precise remaining step (well-scoped, literature-standard):** bridge the sonic region by **high-order analytic continuation** — evaluate the physical sonic-analytic solution via its Frobenius series out to where the +7 instability has not yet dominated, match to the forward-integrated center-regular pair there (a matched two-sided shoot away from the singular point), OR reformulate in **double-null / CSS-similarity coordinates** (the tournament's F1 discussion) where the self-similar solution is smooth-on-grid and the sonic instability is tamed. Then the eigenvalue drops out; discard the gauge root at κ≈1 (this background's gauge).
+
+**Honest state (D-016/D-021):** β STILL NOT MEASURED, none faked. **The operator is the hard scientific crux and it is DONE + verified.** The eigenvalue is a bounded numerical-methods task on a correct operator — the machinery (reduced-3D + identity + Frobenius) is built and characterized; only the sonic-point analytic-continuation step remains. Scaffolds: `hka_beta_match.py` (reduced-3D, best), `hka_beta_spec.py` (spectral), `hka_beta_bvp.py` (collocation), `hka_beta_solve.py`, `hka_beta_validate.py`, `hka_beta_eigfn.py`.
+
 **Honest state (D-016/D-021).** κ, β: STILL NOT MEASURED, none faked. Stage-A golden `fluidcss_stageA` stands. Two independent operators now fail the gauge gate (transcribed: worst at sonic; primary-EOM: worst at center) — the wall is real and localized, not a tuning problem. `β` is withheld until an operator passes `hka_pert.py`'s gauge-mode gate.
 
 ---
