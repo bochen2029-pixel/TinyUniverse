@@ -1,4 +1,4 @@
-# CONTRACT — fluidcss_nexus (radiation-fluid CSS critical exponent, eigenvalue route) · v0.9.0 · status: DRAFT (Stage-A verified, Stage-B blocked — see RESULTS)
+# CONTRACT — fluidcss_nexus (radiation-fluid CSS critical exponent, eigenvalue route) · v0.9.1 · status: **Stage-A golden FROZEN** (Evans–Coleman background, `goldens/fluidcss_stageA/`, D-027); Stage-B/β an honest wall — see RESULTS
 
 **Purpose.** A single-file fp64 CPU tool that measures the **critical exponent of radiation-fluid
 gravitational collapse** `β = 1/Re κ₀` via the **eigenvalue route** of Koike–Hara–Adachi
@@ -113,6 +113,7 @@ and the two candidate systems tested.
 
 ## Changelog
 
+- v0.9.1 (2026-07-12) — **Stage-A LANDED + banked as a golden** (D-027). The tool now implements the Evans–Coleman background (HKA regular center 4.11–4.13 → sonic 4.5; constraint 4.2 as a first integral eliminating A), ported to deterministic C++ fp64 (RK4 center→sonic shoot on the central density oi so V_sonic=−c_s). **oi*=3/8, sonic point (3/2, 2/√3, 3/4, −1/√3) EXACT, 2m/r=1/3, invariants N=N∞e⁻ˣ & A=1+⅔ω** — all EMERGE (nothing tuned). Golden `fluidcss_stageA` `b4f4e463` frozen (declared Stage-A object: oi*, sonic point, 2m/r, invariant residuals, grid-convergence). Supersedes the walled v0.9.0 4D reduction (which lacked a regular center on the *ingoing* sound cone). **β/Stage-B remains BLOCKED** (perturbation ∂ₛ-coupling; D-016/D-021 — β not reported). Tool `substrate/fluidcss_nexus.cpp`; `substrate/MODULE_fluidcss.md`.
 - v0.9.0 (2026-07-11) — DRAFT. Stage-A sonic-point condition derived + verified three ways; contract,
   target, gates, and declared object frozen. Stage-B eigenvalue not yet landing β (fluid-equation
   discrepancy, documented). β **not** reported as measured (D-016 honesty). No golden frozen for a

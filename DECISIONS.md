@@ -4,6 +4,16 @@ Format: D-NNN · date · status · decision / why / consequences. Reversals get 
 
 ---
 
+**D-027 · 2026-07-12 · ACCEPTED — fluid-β Stage-A banked: the Evans–Coleman radiation-fluid CSS critical background landed in deterministic C++ fp64 + frozen as a golden (the crown's foundation stone; β/Stage-B still an honest wall).**
+Operator queue #4 (the crowns), the clean-landable part. The overnight run's Stage-A (Evans–Coleman background via `hka_ec.py`, verified at machine precision) is ported to deterministic C++ fp64 (`substrate/fluidcss_nexus.cpp`: RK4 center→sonic shoot on the central density oi so V_sonic=−c_s) and banked as a Stage-A golden. Measured — **everything EMERGES, nothing tuned to a target**:
+- central density **oi* = 0.3750013** (exact 3/8, rel 3e-6);
+- **sonic point** (A0,N0,ω0,V0) = (1.50000, 1.15470, 0.75000, −0.57735) = **(3/2, 2/√3, 3/4, −1/√3)** to ~1e-5;
+- **Misner–Sharp 2m/r = 1−1/A0 = 0.333335** (exact 1/3);
+- **exact invariants** along the solution: max|A−(1+⅔ω)|=7.7e-6, max|N·eˣ/N∞−1|=8.6e-8;
+- **grid-convergent**: oi*(dx)−oi*(dx/2)=3.8e-6.
+This **supersedes the walled v0.9.0** 4D-reduction `fluidcss_nexus.cpp`: that ODE lacked a regular center on the *ingoing* sound cone (V<0) and never reproduced oi*/the exact sonic point; the Evans–Coleman formulation (regular center HKA 4.11–4.13 → sonic 4.5, constraint 4.2 as a first integral eliminating A) does. **β = 1/Re κ₀ = 0.35580192 remains an HONEST WALL** (Stage-B perturbation ∂ₛ-coupling fails the gauge-mode exactness gate — `RESULTS_hka_beta.md`); **β is NOT reported** (D-016/D-021 — a faked eigenvalue poisons the oracle farm).
+*Consequence:* the fluid-β crown's **Stage A is BANKED** as a green golden (`fluidcss_stageA` `b4f4e463`, two-passed). Contract `fluidcss_nexus.contract.md` → v0.9.1; tool `substrate/fluidcss_nexus.cpp`; `substrate/MODULE_fluidcss.md`. Operator queue #4 partially landed (Stage A); Stage B / scalar-γ remain research walls.
+
 **D-026 · 2026-07-12 · ACCEPTED — Q-006 RESOLVED: the SR+1PN precession superposition (7π) is CORRECT; the app's 6.41π was a normalization artifact. (And the RAYFORMER lesson: the resolution flipped once the actual semi-latus rectum was measured.)**
 Operator queue #3, resolving Q-006 (the D-016 withdrawal). Built `nexus/precession_nexus.cpp` (CPU fp64), the three fp64 isolation experiments Q-006 owed. Findings, all measured:
 **(1) The superposition is correct.** Normalizing the measured precession by the orbit's **actual** (force-distorted) semi-latus rectum: sr (SR inertia + Newtonian force) = **1.00π** (exact Sommerfeld, matched to 9e-9); pn1 (1PN force + Newtonian inertia) = **6.03π** (the correct full-GR value); combined (SR inertia + 1PN force) = **6.95π ≈ 7π**. So π + 6π = 7π holds to ~1% (the residual is O(ε²) cross-terms). The einstein contract's 7π claim was **right**.
