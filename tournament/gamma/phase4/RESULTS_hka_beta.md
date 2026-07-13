@@ -183,3 +183,17 @@ against a scale-invariant gate; it is armed and waiting on a correct perturbatio
 **Cleanest unblock (next attempt):** (1) **fetch gr-qc/9607010 and transcribe §V** (the explicit perturbation coefficients) → drop into `hka_pert_primary`/`hka_pert_core` → the gate should pass; OR (2) finish the primary-EOM derivation's near-center (Ā,N̄) coupling (the residual localized above). Then the already-built, validated match determinant `hka_beta4.Delta` reads κ (discard the gauge modes κ≈0.35699/1 per HKA fn15) → β=1/Re κ.
 
 **Honest state (D-016/D-021).** κ, β: STILL NOT MEASURED, none faked. Stage-A golden `fluidcss_stageA` stands. Two independent operators now fail the gauge gate (transcribed: worst at sonic; primary-EOM: worst at center) — the wall is real and localized, not a tuning problem. `β` is withheld until an operator passes `hka_pert.py`'s gauge-mode gate.
+
+---
+
+## UPDATE 2026-07-12 (session 2, cont.) — **THE OPERATOR IS CRACKED** (gauge gate → 1e-10)
+
+**Fetched the authoritative long paper** (HKA gr-qc/9607010 = PRD 59 104008, `HKA99_src/rflanl.tex` §V `eq:EOM-var`/`eq:EOM-eigenmodes`). Coefficient-by-coefficient, the transcribed (5.5)–(5.10) were **already correct**. **The bug was never the coefficients — it was the ASSEMBLY.** The paper writes the eigenmode system as
+
+> `M_x · Ψ' = (Gmat − κ M_s) · Ψ`,  where **`M_x` is NOT the identity**: `M_x = diag-block(1, 1, [[Ax,Bx],[Cx,Dx]])`.
+
+So the correct operator is **`L = M_x⁻¹ (Gmat − κ M_s)`** — the fluid rows must be multiplied by `[[Ax,Bx],[Cx,Dx]]⁻¹`. The prior `hka_pert_symbols`/`hka_pert_core` assembly and my `hka_pert_primary` both mishandled this `M_x` inversion (treating the fluid ∂ₓ block as if pre-inverted / a linear-combination mismatch).
+
+**Verified (`hka_pert_hka99.py`, the authoritative operator):** the gauge-mode exactness gate now passes to **machine precision — `|res|/|Ψ_g| ≈ 1e-10` for every κ̄ ∈ {0.357, 1.0, 2.81}**, at every x. The κ¹ gauge condition `E2 = As·ω̄_x + Bs·V_x`, `F2 = Cs·ω̄_x + Ds·V_x` holds to ~1e-15 on the background (it is the background Eq 3/4). **This is the wall broken** — the exact thing that blocked the overnight run and session-2's first pass.
+
+**Remaining: the eigenvalue extraction (β = 1/Re κ₀, κ₀≈2.81055255).** The paper (Table I) confirms γ=4/3 → κ=2.81055255, β=0.35580192, unique relevant mode. Getting κ from the *correct* operator is now a standard-but-delicate singular-BVP shoot (regular-singular sonic point + stiff center; mode collapse under long integration). The prior `hka_beta4` match machinery (calibrated for the wrong operator) is too noisy; a robust BVP eigensolver (spectral collocation / orthonormalized shoot / `solve_bvp`) on the verified `hka_pert_hka99.Lnum` is the clean next step. Tools: `hka_pert_hka99.py` (operator, GATE-VERIFIED), `hka_beta_solve.py` (shoot scaffold). β still withheld until κ lands + G-UNIQUE/G-CONVERGE fire — the machine is armed on a correct operator for the first time.
