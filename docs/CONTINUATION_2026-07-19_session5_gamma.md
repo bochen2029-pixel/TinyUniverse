@@ -38,12 +38,22 @@ IS your rehydration; follow §0 exactly. Trust files over prose; verify against 
   padded (64,20,21) → 0.273 (UNPHYSICAL, discarded). **The log-g full chain is running**
   (`logg_chain.log`; checkpoints `logg48.npy`, `logg64.npy`): controls → fresh seed →
   (48,14,13) LM → pad → (64,20,21) LM.
-- **THE SINGLE NEXT ACTION:** process `logg_chain.log`. If the (64,20,21) log-g grind
-  reaches a floor (~1e-2 or lower) with decaying k=15–21 tails AND g range physical:
-  the release ladder — pin off (Δ frozen) → re-solve → Δ free → re-solve → **measure Δ**
-  with the which-solution battery (tails decaying-nonzero, no machine-zero, g > 0
-  everywhere, Δ ∈ [3.40, 3.49] not ≈1.72). If it plateaus ≳0.1: next levers = Nz 40→60
-  (upsample_u) and/or complex-step Jacobian; then honest wall if exhausted.
+- **UPDATE (~13:35): IMPOSTOR FLAVOR #4 + THE ROOT CAUSE.** The log-g chain descended to
+  |r|=8.8e-3 but the state has ZERO low harmonics (k=1–5 ≈ 0, g≈1, high-k whispers only) —
+  a near-linear high-frequency wave satisfying the pin (the pin doesn't select WHICH
+  harmonics carry amplitude). Root cause found: **the extraction τ-window was misplaced** —
+  T ∈ [0.55, 17] ⇔ t_G ∈ [1.2, 14.6] but echoes only start at t_G ≈ 11.8 ⇒ ~70% of the
+  window was PRE-CRITICAL INFALL transient, diluting every seed. The clean echo window is
+  **T ∈ [t\*−t_first_crossing]·[e^{−Δ}, 1] ≈ [0.11, 3.37]** — exactly one period inside the
+  echo regime. **Battery addition: LOW-K DOMINANCE check** (k=1–5 must dominate X± — a
+  high-k-only state is the linear-wave impostor). Echo-aligned chain running
+  (`echo_chain.log`, checkpoint `echo48.npy`; pin re-derived from the echo-true SSH
+  amplitude).
+- **THE SINGLE NEXT ACTION:** process `echo_chain.log`; if the echo-true seed grinds to a
+  floor with LOW-K-DOMINANT decaying spectrum and physical g: pad → (64,20,21) → release
+  ladder (pin off, Δ frozen → Δ free) → **measure Δ** with the full battery (now 5 checks:
+  tails decaying-nonzero, no machine-zero, g>0, low-k dominance, Δ ∈ [3.40,3.49] ≠ 1.72).
+  Else: Nz=60 / complex-step Jacobian levers, then honest wall.
 - **HARD CONSTRAINTS:** never fake a number (D-016/D-021/D-032); **the machine-zero tell**
   (|r| ≈ 1e-15 at finite truncation = the VACUUM — check spectral tails EVERY convergence);
   the Δ/2 = 1.72 impostor check; contract gates unchanged; commit early and often; push after
