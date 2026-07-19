@@ -28,6 +28,14 @@ Mirrors ORRERY D-021: **fat binary** — sm_89 + sm_90 SASS, compute_120 PTX (fo
 
 App dependencies via FetchContent (Buddhabrot-proven set): GLFW 3.4, GLAD v2, Dear ImGui 1.91, stb. **Vulkan SDK: 1.4.350.0 — PINNED (installed 2026-07-19 via winget, D-034; `C:\VulkanSDK\1.4.350.0`, `VULKAN_SDK` machine env set; the RTX 4070 Ti SUPER enumerates at API 1.4.341, driver 610.47; the Intel iGPU ALSO enumerates — R0 device selection must pick the discrete card).** Vulkan link line (R0+): `/I"%VULKAN_SDK%\Include"` + `"%VULKAN_SDK%\Lib\vulkan-1.lib"`.
 
+## R0 `interop` (Vulkan⇄CUDA presentation; D-034, contract v1.0.0)
+
+```
+cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1 && nvcc -O3 -arch=sm_89 -o build\interop.exe render\interop.cu -I"C:\VulkanSDK\1.4.350.0\Include" "C:\VulkanSDK\1.4.350.0\Lib\vulkan-1.lib" user32.lib'
+```
+
+(Explicit SDK path — shells predating the install lack the `VULKAN_SDK` env var.)
+
 ## OptiX (M5)
 
 Function-table dispatch via `optix_stubs.h` (`optixInit()` pulls `nvoptix.dll` from the driver — **no .lib link**). CMake auto-detects the SDK at `C:/ProgramData/NVIDIA Corporation/OptiX SDK 9.1.0/include`; if absent, the OptiX path is compiled out and the renderer falls back to the CUDA-compute geodesic path. The app must never *require* the SDK. (Buddhabrot v4 recipe, verbatim.)

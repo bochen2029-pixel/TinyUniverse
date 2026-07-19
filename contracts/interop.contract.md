@@ -1,10 +1,12 @@
 # interop.contract.md — `interop` (R0: the Vulkan⇄CUDA presentation rung)
 
-**Version 0.1.0 — DRAFT · ⏸ OPERATOR REVIEW REQUIRED before any module source**
-(contract-first hard rule). Prerequisite CLEARED: Vulkan SDK 1.4.350.0 pinned, device
-enumeration verified (D-034). Basis: ROADMAP §4 R0 · D-002 (Path A: CUDA renders,
-Vulkan presents, renderer swappable at the frame contract) · D-012 (P1 presentation:
-swapchain + external memory + timeline semaphores, replacing the P0 GL blit).
+**Version 1.0.0 — FROZEN** (approved by operator directive 2026-07-19: "keep going and
+proceed to next" on the presented draft — the same green-light convention as the
+choptuik contract; open questions resolved as recommended, below; frozen with golden
+`interop_r0` `4ba7fbcb…`, two-passed same day; windowed face smoke-verified live). Prerequisite CLEARED: Vulkan SDK 1.4.350.0 pinned, device enumeration verified
+(D-034). Basis: ROADMAP §4 R0 · D-002 (Path A: CUDA renders, Vulkan presents, renderer
+swappable at the frame contract) · D-012 (P1 presentation: swapchain + external memory
++ timeline semaphores, replacing the P0 GL blit).
 
 ## Purpose
 
@@ -90,11 +92,12 @@ nvcc -O3 -arch=sm_89 ... render\interop.cu
 ```
 (exact single-file vs two-TU split decided at implementation; recorded in MODULE.md.)
 
-## Open questions for review
+## Open questions — RESOLVED at approval (as recommended)
 
-- Q-R0-1: swapchain format policy (prefer `B8G8R8A8_UNORM` v0; HDR10 deferred to R1?).
-- Q-R0-2: buffer-import fallback — accept linear-tiling `VkBuffer`+blit as the
-  compatibility path if optimal-tiling image import fails on some driver, or hard-fail?
-  (Draft says: accept + DECLARE which path ran, in the golden string.)
-- Q-R0-3: R0 as its own binary (`build\interop.exe`, recommended — smallest honest
-  rung) vs. a face inside `tinyuniverse.exe` (bigger blast radius).
+- Q-R0-1 → `B8G8R8A8_UNORM` swapchain at v0; HDR10 deferred to R1.
+- Q-R0-2 → the shared allocation is a `VkBuffer` (exported `OPAQUE_WIN32`), presented
+  by `vkCmdCopyBufferToImage` — the canonical CUDA-sample interop shape; the path is
+  DECLARED in the golden string (`"path":"buffer-copy"`). Optimal-tiling image import
+  is an R1 refinement, not an R0 requirement.
+- Q-R0-3 → own binary `build\interop.exe` (smallest honest rung; zero blast radius on
+  `tinyuniverse.exe`).

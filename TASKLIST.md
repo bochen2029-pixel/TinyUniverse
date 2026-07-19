@@ -120,6 +120,14 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☑ **scalar-γ direct route CLOSED 2026-07-19**: `choptuik_nexus` v1.0.0 (`contracts/choptuik.contract.md`) — Choptuik mass scaling on the C++ port of the session-6 evolver (port measured **BIT-EXACT** vs the Python research table); campaign **γ = 0.37 ± 0.02** (N=3200) + the fine-structure wiggle DETECTED; goldens `choptuik_scaling` `86c68cf9` (γ[M70]=0.3406859239 frozen) + `choptuik_cross` `0e04f941`
 - ☐ **γ/Δ to crown precision (±0.001 / Δ=3.4453) — AMR-gated** (D-021 upgraded to a MEASURED TRIPLE in session 6: BVP center-band sub-grid · scaling-wiggle window < 1 period · echo-regime span < 1 period). The BVP machinery (all-green refinement ladder + which-solution battery + at_floor) stands ready at N4. Full saga: `tournament/gamma/dss/RESULTS_dss.md`
 
+### R0 · `interop` — the renderer unparked ☑ **CLOSED 2026-07-19** (D-034)
+- ☑ The Vulkan SDK gate CLEARED (winget → 1.4.350.0, pinned in BUILD.md; RTX enumerates at API 1.4.341; the iGPU-also-enumerates caveat measured)
+- ☑ Contract `contracts/interop.contract.md` v1.0.0 (approved via "keep going and proceed to next"; Q-R0-1..3 resolved as recommended); module `render/interop.cu` (single file, nvcc + vulkan-1.lib)
+- ☑ The mechanism proven ALL-GREEN first run: shared `VkBuffer` exported OPAQUE_WIN32 → `cudaImportExternalMemory` (zero-copy); two exported TIMELINE semaphores; LUID-matched device pick; validation layers ON with **0 errors / 0 warnings**; G-ROUNDTRIP byte-identity; G-SYNC 240 strictly-monotonic embedded counters
+- ☑ Golden `interop_r0` `4ba7fbcb` frozen (two-passed, ~1.2 s); windowed face smoke-verified live ("the sim breathes": CUDA pattern → swapchain at vsync)
+- ☐ **R1 `cinematic` next** — port the GARGANTUA HDR → mip-bloom → AgX/ACES stack onto this path (CINEMATIC.md binds from R1); then R2 wires the substrate
+- **Gate: MET** — a live Vulkan window presents CUDA pixels zero-copy with correct sync, and the headless face proves it byte-exactly under validation layers.
+
 ### N4 (GPU, future — gated against N0 + the 21 v1 goldens)
 - ☐ N4 `star` (fusion closure + radiation + Ratchet lattice — the hydrogen-ball sentence)
 

@@ -15,6 +15,7 @@ BUILDS = [
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo nexus\\precession_nexus.cpp /Fe:build\\precession_nexus.exe /Fo:build\\precession_nexus.obj',   # v1 polish (Q-006 precession, CPU)
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\\fluidcss_nexus.cpp /Fe:build\\fluidcss_nexus.exe /Fo:build\\fluidcss_nexus.obj',   # crown Stage-A (fluid CSS, CPU)
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\\choptuik_nexus.cpp /Fe:build\\choptuik_nexus.exe /Fo:build\\choptuik_nexus.obj',   # gamma crown: direct mass scaling (CPU)
+    f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -o build\\interop.exe render\\interop.cu -I"C:\\VulkanSDK\\1.4.350.0\\Include" "C:\\VulkanSDK\\1.4.350.0\\Lib\\vulkan-1.lib" user32.lib',   # R0 interop (Vulkan+CUDA)
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\tinyuniverse.exe app\\tinyuniverse.cu core\\lib\\envelope.cpp user32.lib gdi32.lib opengl32.lib cufft.lib',
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\field_nexus.exe substrate\\field_nexus.cu cufft.lib',   # v2 N1 (SP field)
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\lapse_nexus.exe substrate\\lapse_nexus.cu cufft.lib',   # v2 N2 (lapse/clock)
@@ -57,6 +58,12 @@ FLUIDCSS_GOLDENS = [
 CHOPTUIK_GOLDENS = [
     ("choptuik_scaling", [r"build\choptuik_nexus.exe", "--scaling", "--golden"]),
     ("choptuik_cross",   [r"build\choptuik_nexus.exe", "--cross",   "--golden"]),
+]
+# R0 interop (contracts/interop.contract.md v1.0.0, D-034): Vulkan-CUDA external-memory
+# presentation, headless gated face (validation layers ON; roundtrip/sync/LUID gates).
+# GPU-bound -> behind the preflight with the other GPU goldens.
+INTEROP_GOLDENS = [
+    ("interop_r0", [r"build\interop.exe", "--headless", "--frames", "240", "--golden"]),
 ]
 GOLDENS = [
     ("kepler",    [r"build\tinyuniverse.exe", "--scenario", "kepler",    "--golden"]),
@@ -167,7 +174,9 @@ def main():
         red += run_goldens(FIELD_GOLDENS)
         print("[gpu] v2 N2 lapse goldens:")
         red += run_goldens(LAPSE_GOLDENS)
-    n = len(CPU_GOLDENS) + len(CURVE_GOLDENS) + len(INSPIRAL_GOLDENS) + len(PRECESSION_GOLDENS) + len(FLUIDCSS_GOLDENS) + len(CHOPTUIK_GOLDENS) + ((len(GOLDENS) + len(FIELD_GOLDENS) + len(LAPSE_GOLDENS)) if gpu_ok else 0)
+        print("[gpu] R0 interop golden:")
+        red += run_goldens(INTEROP_GOLDENS)
+    n = len(CPU_GOLDENS) + len(CURVE_GOLDENS) + len(INSPIRAL_GOLDENS) + len(PRECESSION_GOLDENS) + len(FLUIDCSS_GOLDENS) + len(CHOPTUIK_GOLDENS) + ((len(GOLDENS) + len(FIELD_GOLDENS) + len(LAPSE_GOLDENS) + len(INTEROP_GOLDENS)) if gpu_ok else 0)
     print("-"*40)
     if not gpu_ok:                              # CPU oracles still reported; GPU suite deferred
         print(f"  CPU {'ALL GREEN' if red==0 else f'{red} RED'}; GPU goldens SKIPPED "
