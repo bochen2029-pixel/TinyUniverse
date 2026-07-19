@@ -111,3 +111,35 @@ it. Seed representation also improved (|r| 7.64 -> 3.38 at the same seed).
   frame/interpolation inconsistency). N=1600 re-bisection launched (needed by every future
   path). Secondary levers for session 2: pseudo-transient continuation (Psi-tc damped
   Newton), complex-step Jacobian, k~21 truncation (Gundlach 2N=128).
+
+### N=1600 chain (final probe of session 1): the EXTRACTION pipeline binds, not the data
+
+- The finer evolver is richer: 15 clean crossings (vs 8), t* = 15.192 +- 0.04, and the
+  in-house **Delta_echo improves 3.216 -> 3.334** (N=800 -> N=1600; Gundlach 3.4453) —
+  a resolution-convergent honest estimate now within 3.2%. This trend is itself a
+  deliverable (the evolver-side redundant-recovery observable of the contract).
+- BUT the relaxation seed built from it is WORSE (|r| = 13.7 vs 3.38; SSH RMS(X+) = 0.048
+  vs 0.071): the cylinder-extraction pipeline (SSH locator with xi0-prime neglected,
+  frame approximations, nearest-snapshot sampling) — not the raw evolution — limits seed
+  quality. Newton descends further initially (3.40 -> 1.46) then stalls in the same
+  plateau class (gdev frozen 0.084).
+
+## SESSION-1 CLOSE — the wall, named exactly
+
+**Delta and gamma are NOT measured (none faked).** The binding constraint, measured across
+six solver campaigns and two evolver resolutions: **seed/extraction quality into a
+weakly-conditioned interior valley** (cond(J) ~ 1e6; near-null mid-cylinder modes).
+In-hand assets: the full evolver + p* at two resolutions (0.03751655962597 @ N=800,
+0.03732817692976 @ N=1600), Delta_echo 3.33 (resolution-trending to 3.4453), the validated
+relaxation system (vacuum EXACTLY 0, square, truncation-configurable), exact-Newton +
+sparse-Jacobian tooling, and the two vacuum-watershed catches as house law.
+
+**SESSION-2 RECIPE (ranked):**
+1. **Extraction rebuild**: solve xi0(tau) from the FULL coordinate condition (with xi0'),
+   locate the SSH per-tau on the fine grid, sample by 2-D interpolation in (tau, zeta)
+   from MANY snapshots (not nearest), and fit boundary functions by least squares over a
+   whole period band. Target: seed |r| < 1 with SSH RMS(X+) ~ 0.2-0.4.
+2. **Psi-tc (pseudo-transient) damped Newton** on the relaxation system + complex-step
+   Jacobian (kills FD noise in the flat valley).
+3. **k ~ 21 truncation** ((64,20,21)) once descent works.
+4. Then the pin-release ladder + which-solution battery (unchanged).
