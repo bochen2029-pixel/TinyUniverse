@@ -115,6 +115,11 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☐ *(deferred → N4+, D-024)* a live GPU metric field a²(x) with dynamical back-reaction (energy density sourcing the metric each step); strong-field / higher-PN
 - **Gate: MET** — geometry curves: light bends at the exact GR angle (space curvature is the difference over N2), orbits precess at the GR rate (D-024).
 
+### Crowns · critical exponents (Axis-C research → goldens)
+- ☑ **fluid-β CLOSED 2026-07-19** (D-032): `fluidcss_nexus` v1.0.0 — β = 0.3557988 measured on the TRUE Evans–Coleman background (|Δβ| = 3.1e-6 vs lit); goldens `27af7920` + `9f8587fd`
+- ☑ **scalar-γ direct route CLOSED 2026-07-19**: `choptuik_nexus` v1.0.0 (`contracts/choptuik.contract.md`) — Choptuik mass scaling on the C++ port of the session-6 evolver (port measured **BIT-EXACT** vs the Python research table); campaign **γ = 0.37 ± 0.02** (N=3200) + the fine-structure wiggle DETECTED; goldens `choptuik_scaling` `86c68cf9` (γ[M70]=0.3406859239 frozen) + `choptuik_cross` `0e04f941`
+- ☐ **γ/Δ to crown precision (±0.001 / Δ=3.4453) — AMR-gated** (D-021 upgraded to a MEASURED TRIPLE in session 6: BVP center-band sub-grid · scaling-wiggle window < 1 period · echo-regime span < 1 period). The BVP machinery (all-green refinement ladder + which-solution battery + at_floor) stands ready at N4. Full saga: `tournament/gamma/dss/RESULTS_dss.md`
+
 ### N4 (GPU, future — gated against N0 + the 21 v1 goldens)
 - ☐ N4 `star` (fusion closure + radiation + Ratchet lattice — the hydrogen-ball sentence)
 

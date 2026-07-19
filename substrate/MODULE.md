@@ -92,3 +92,15 @@ cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\fluidcss_nexus.cpp /Fe:build\fluid
 ```
 
 **Research thread (Python, higher precision):** `tournament/gamma/phase4/` — `nr_ec2.py` (EC background), `nr_lyap.py` (Lyapunov spectrum κ=2.8105526), `nr_shoot_ec.py` (shoot κ=2.810552374), `RESULTS_hka_beta.md` (the full saga + D-032 addendum).
+
+# MODULE — choptuik_nexus (γ crown: the direct mass-scaling measurement)
+
+**Purpose.** The Choptuik critical exponent measured the classic way: supercritical mass scaling M_BH ∝ (p−p\*)^γ on the polar-areal massless-scalar evolver (faithful C++ port of `tournament/gamma/dss/nr_evolve.py`, session-6 run-4 observables: sub-cell-interpolated 2m/r = 0.70/0.65 crossing masses + freeze-peak mass). Campaign quote **γ = 0.37 ± 0.02** (N=3200, `tournament/gamma/dss/RESULTS_dss.md`); the golden locks the N=1600 pipeline (γ[M70] = 0.3406859239 frozen in-hash). **The ±0.001 crown precision is AMR-gated (the D-021 measured triple) — not claimed.**
+**Contract:** `contracts/choptuik.contract.md` v1.0.0 (FROZEN). **Oracle:** (a) the committed Python research table `tournament/gamma/dss/gamma_scaling.npy` — **measured port fidelity: BIT-EXACT, worst relative deviation 0.000e+00** across 4 anchors × 3 observables (~3000 RK4 steps × 1600 nodes each; ~55× faster than numpy); (b) the literature γ = 0.374(1) as the wide G-GAMMA band [0.30, 0.45] (the 2-decade window holds ≈1.3 fine-structure periods ⇒ residual wiggle-phase bias ±0.05, documented in-contract).
+**Goldens (2/2, CPU fp64 — no GPU):** `choptuik_scaling` `86c68cf9` (`--scaling --golden`, ~13 s) · `choptuik_cross` `0e04f941` (`--cross --golden`, ~2 s). `--selftest` = flat-metric machine-zero + exact peak-interpolator + vacuum-disperses. Research faces: `--ladder N lo hi npts pstar` · `--bisect N [iters]` (p\*(800/1600/3200) recorded in the contract).
+
+```
+cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\choptuik_nexus.cpp /Fe:build\choptuik_nexus.exe /Fo:build\choptuik_nexus.obj
+```
+
+**Honest boundary:** uniform grid — Δ (the fine-structure period) is NOT measurable here (window < 1 clean period, measured three independent ways in session 6); γ beyond ±0.02 needs AMR (N4).
