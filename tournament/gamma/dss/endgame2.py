@@ -188,20 +188,21 @@ def run48():
     u, verdict = ramp_release(rx1, u, c48, 'r48')
     print(f"[run48] verdict: {verdict}  ({time.time() - t00:.0f}s)", flush=True)
 
-def hi_mask(rx):
-    """0/1 mask over u marking EXACTLY the coefficients absent from (48,14,13): even
-    harmonics k>=16 (index >= 15) and odd harmonics k>=15 (index >= 14), at every node
-    and in xi0. The annealed Tikhonov penalty acts on these — the optimizer only gets the
-    new freedom as fast as the anneal grants it (nzprobe verdict: either axis refined
-    alone lets descent pile junk into whatever modes just opened)."""
+def hi_mask(rx, KE0=14, KO0=13):
+    """0/1 mask over u marking the coefficients ABOVE a base truncation (KE0, KO0): even
+    indices >= 1+KE0, odd indices >= KO0+1, at every node and in xi0. The annealed
+    Tikhonov penalty acts on these — the optimizer only gets the new freedom as fast as
+    the anneal grants it (nzprobe verdict: either axis refined alone lets descent pile
+    junk into whatever modes just opened)."""
     NE, NO, NPF = R.NE, R.NO, R.NPF
+    je, jo = 1 + KE0, KO0 + 1
     m = np.zeros(rx.nu)
-    m[15:NE] = 1.0                                     # xi0 high (u_i = xi0c_i for i>=3)
+    m[je:NE] = 1.0                                     # xi0 high (u_i = xi0c_i for i>=3)
     for k in range(rx.Nz):
         b = NE + NPF*k
-        m[b + 15: b + NE] = 1.0                        # g even k>=16
-        m[b + NE + 14: b + NE + NO] = 1.0              # X+ odd k>=15
-        m[b + NE + NO + 14: b + NPF] = 1.0             # X- odd k>=15
+        m[b + je: b + NE] = 1.0                        # g even k > KE0
+        m[b + NE + jo: b + NE + NO] = 1.0              # X+ odd k > KO0
+        m[b + NE + NO + jo: b + NPF] = 1.0             # X- odd k > KO0
     return m
 
 def lm_tik(rx, u0, mask, eps, pin=None, freeze_delta=None, max_iter=25, rtol=1e-10, verbose=False, lam0=1e-2):
@@ -293,6 +294,66 @@ def runA():
     u3, verdict = ramp_release(rx3, u3, c48, 'runA')
     print(f"[runA] verdict: {verdict}  ({time.time()-t00:.0f}s)", flush=True)
 
+def vec_of(rx, u):
+    _, _, _, xpc, _ = rx.unpack(u)
+    return xpc[-1][:6].copy()
+
+def pad_trunc(rx1, u, KE1, KO1, M2, KE2, KO2, Nz=None):
+    """Unpack under the CURRENT config (·,KE1,KO1), reconfigure to (M2,KE2,KO2),
+    return (rx2, u2) with zero-padded harmonics (identity when KE/KO unchanged)."""
+    D_, xi0c_, gc_, xpc_, xmc_ = rx1.unpack(u)
+    R.configure(M2, KE2, KO2)
+    rx2 = R.Relax(Nz=(Nz or rx1.Nz))
+    u2 = pack(rx2, D_,
+              pad_even(xi0c_, KE1, KE2),
+              np.stack([pad_even(r_, KE1, KE2) for r_ in gc_]),
+              np.stack([pad_odd(r_, KO1, KO2) for r_ in xpc_]),
+              np.stack([pad_odd(r_, KO1, KO2) for r_ in xmc_]))
+    return rx2, u2
+
+def runMK():
+    """The converged-rung ladder (post-A0 design). A0 measured that from a FAR padded
+    state (|r|~1.1) the descent is always drain — the lowk RMS pin was defeated by
+    relocation into k=5 alone. So: (1) the VECTOR pin (6 SSH coefficients clamped
+    individually to the previous rung's converged values — not relocatable), and
+    (2) never be far: rung 0 is the pure M-jump 48->64 at (14,13) (same basis, same u,
+    finer collocation — DIRECTLY measures the aliasing-hidden error of the 48-'solution'),
+    then K opens TWO harmonics per rung from a converged state (annealed Tikhonov on just
+    the newest), then Nz climbs 40->50->60, then ramp + Delta release with at_floor."""
+    t00 = time.time()
+    R.configure(48, 14, 13); R.vacuum_control()
+    rx, u = load48()
+    KEp, KOp = 14, 13
+    rn = None
+    for (M2, KE2, KO2) in ((64, 14, 13), (64, 16, 15), (64, 18, 17), (64, 20, 21)):
+        vec = vec_of(rx, u)
+        rx, u = pad_trunc(rx, u, KEp, KOp, M2, KE2, KO2)
+        print(f"[MK] rung ({M2},{KE2},{KO2}): raw|r|={np.linalg.norm(rx.residual(u)):.4f}", flush=True)
+        m = hi_mask(rx, KEp, KOp)
+        for eps in ((1.0, 0.1, 0.0) if m.any() else (0.0,)):
+            u, rn, st = lm_tik(rx, u, m, eps, pin=('vec', vec, 30.0), freeze_delta=LIT, max_iter=30)
+            print(f"[MK] ({M2},{KE2},{KO2}) eps={eps:g}: {st}  |r|={rn:.4e}", flush=True)
+        np.save('runMK_cur.npy', u)
+        if not battery(rx, u, f'MK-{M2}-{KE2}-{KO2}', rn):
+            print(f"[VERDICT] runMK broke at rung ({M2},{KE2},{KO2}) — that rung is where "
+                  f"the basis/optimizer loses the physics. None faked.", flush=True); return
+        KEp, KOp = KE2, KO2
+    for Nz2 in (50, 60):
+        vec = vec_of(rx, u)
+        rx2 = R.Relax(Nz=Nz2)
+        u = R.upsample_u(rx, u, rx2); rx = rx2
+        print(f"[MK] Nz={Nz2}: raw|r|={np.linalg.norm(rx.residual(u)):.4f}", flush=True)
+        for _ in range(3):
+            u, rn, st, _ = lm(rx, u, pin=('vec', vec, 30.0), freeze_delta=LIT, max_iter=30, verbose=False, lam0=1e-2)
+            if st != 'maxiter':
+                break
+        print(f"[MK] Nz={Nz2}: {st}  |r|={rn:.4e}", flush=True)
+        np.save('runMK_cur.npy', u)
+        if not battery(rx, u, f'MK-Nz{Nz2}', rn):
+            print(f"[VERDICT] runMK broke at Nz={Nz2}. None faked.", flush=True); return
+    u, verdict = ramp_release(rx, u, lowk_amp(rx, u), 'runMK')
+    print(f"[runMK] verdict: {verdict}  ({time.time()-t00:.0f}s)", flush=True)
+
 def nzprobe():
     """Plateau vs Nz — the decisive discrimination for the 7.9e-2 plateau at (48,14,13):
     if the plateau DROPS as Nz rises, the z-discretization is inconsistent at Nz=40 (the
@@ -316,4 +377,4 @@ def nzprobe():
 
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else 'smoke'
-    {'smoke': smoke, 'run': run, 'run48': run48, 'nzprobe': nzprobe, 'runA': runA}[mode]()
+    {'smoke': smoke, 'run': run, 'run48': run48, 'nzprobe': nzprobe, 'runA': runA, 'runMK': runMK}[mode]()

@@ -166,12 +166,19 @@ class Relax:
                     _, _, _, xpc_, _ = self.unpack(u)
                     amp = np.sqrt(np.mean(xpc_[-1][:6]**2))
                     out.append(np.array([pin[2]*(amp - pin[1])]))
+                elif len(pin) == 3 and pin[0] == 'vec':
+                    # VECTOR pin: clamp the k<=5 SSH X+ COEFFICIENTS individually (measured
+                    # runA-A0: the lowk RMS is ONE scalar — the optimizer relocated the whole
+                    # amplitude into k=5 alone and drained the rest; a vector is not relocatable)
+                    _, _, _, xpc_, _ = self.unpack(u)
+                    out.append(pin[2]*(xpc_[-1][:6] - pin[1]))
                 else:
                     c, w = pin
                     out.append(np.array([w*(np.sqrt(np.mean(Xp[-1]**2)) - c)]))
             return np.concatenate(out)
         except FloatingPointError:
-            n = NPF*(self.Nz - 1) + 2*(NE + NO) + (1 if pin is not None else 0)
+            npin = 0 if pin is None else (6 if (len(pin) == 3 and pin[0] == 'vec') else 1)
+            n = NPF*(self.Nz - 1) + 2*(NE + NO) + npin
             return np.full(n, 30.0)
 
     # ---- sparsity for grouped finite differences ----

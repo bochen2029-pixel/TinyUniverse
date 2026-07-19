@@ -213,12 +213,25 @@ sparse-Jacobian tooling, and the two vacuum-watershed catches as house law.
   at once gets filled with junk. Also measured: the Nz=40 state carries node-scale
   z-roughness (raw upsampled |r| = 8.3 at Nz=60) — the valley's near-null mid-cylinder
   modes ARE node-scale wiggles.
-- **runA (in flight): the joint ladder** — pad → (64,20,21), Nz 40→60, with the new
-  harmonics (even k≥16, odd k≥15, every node + ξ₀) held by an **annealed spectral
-  Tikhonov penalty** (`lm_tik`: augmented objective |r|² + ε²|S·u|², ε: 10 → 0, penalty
-  analytic in the normal equations): the basis gets the room the physics needs, the
-  optimizer gets the freedom only as the anneal grants it. Then pin ramp + Δ release
-  with `at_floor` enforced. If the battery breaks at some ε, that ε is where junk beats
-  physics — recorded either way.
+- **runA-A0 VERDICT (`runA.log`): the lowk pin's OWN blind spot, measured.** With the
+  annealed Tikhonov clamping high-k (ε=10) the padded-state grind STILL drained —
+  g → [0.993, 1.000], everything ≈ 0 except **k=5 = 0.042: the optimizer relocated the
+  entire pinned amplitude into the single k=5 coefficient** (an RMS over 6 coefficients
+  is ONE scalar; the weak-field wave lives inside its level set). Battery caught it via
+  strong_field. **Unifying fact across v1 / v2-64 / A0: from a FAR padded state
+  (|r| ≈ 1.1) the descent direction is ALWAYS drain**, in whatever flavor the
+  pin/penalty leave open — while from the near-manifold 48³ state it never is (run48).
+  Corollary: the pad-jump 0.079 → 1.14 says the 48³ "solution" is flattered by coarse
+  τ-collocation (aliasing-hidden inter-collocation error).
+- **Pin evolution: `pin=('vec', c6, w)`** — the 6 SSH X₊ coefficients clamped
+  INDIVIDUALLY (not relocatable). Bug-catalog addition: **RMS-form pins (total AND
+  lowk) are relocatable; only a vector pin is not.**
+- **runMK (in flight): the converged-rung ladder** — never be far: rung 0 = the pure
+  M-jump 48→64 at (14,13) (same basis, same u, finer collocation — directly measures
+  the aliasing-hidden error and whether the old basis can close it); then K opens TWO
+  harmonics per rung from a CONVERGED state (annealed Tikhonov on just the newest;
+  vector pin at w=30 throughout); then Nz climbs 40→50→60; then ramp + Δ release with
+  `at_floor`. Whichever rung breaks names the wall exactly; if none break, the FINAL
+  battery + floor decide whether a preliminary Δ exists.
 - N=3200 p\* bisection hedge in flight (`pstar3200.log`) → third point for the in-house
   Δ_echo resolution series [3.216, 3.334, …] → 3.4453.
