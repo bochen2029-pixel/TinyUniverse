@@ -41,10 +41,13 @@ PRECESSION_GOLDENS = [
     ("precession_pn1",      [r"build\precession_nexus.exe", "--scenario", "pn1",      "--golden"]),
     ("precession_combined", [r"build\precession_nexus.exe", "--scenario", "combined", "--golden"]),
 ]
-# crown Stage-A: radiation-fluid CSS critical background (Evans-Coleman). CPU fp64 oracle.
-# (beta / Stage-B remain a documented honest wall — not gated here.)
+# crown (COMPLETE, D-032): radiation-fluid CSS critical exponent. CPU fp64 oracle.
+# Stage-A = the TRUE Evans-Coleman background (V0-shoot; supersedes the v0.9.x
+# Friedmann-as-EC golden, see goldens/fluidcss_stageA/NOTE.md); Stage-B = the
+# relevant eigenvalue -> beta = 1/kappa0 = 0.3557988 (lit 0.35580192).
 FLUIDCSS_GOLDENS = [
     ("fluidcss_stageA", [r"build\fluidcss_nexus.exe", "--stageA", "--golden"]),
+    ("fluidcss_stageB", [r"build\fluidcss_nexus.exe", "--stageB", "--golden"]),
 ]
 GOLDENS = [
     ("kepler",    [r"build\tinyuniverse.exe", "--scenario", "kepler",    "--golden"]),

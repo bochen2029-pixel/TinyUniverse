@@ -13,10 +13,15 @@ import nr_sonic as NS
 g = 4.0/3.0
 smul = NS.smul; sinv = NS.sinv; sconst = NS.sconst; sderiv = NS.sderiv_shift
 
-def _series_coeffs(kappa, order):
-    """All operator coefficients as Taylor series in t (length K), on the exact background."""
+def _series_coeffs(kappa, order, bgser=None):
+    """All operator coefficients as Taylor series in t (length K), on the exact background.
+    bgser = (A,N,om,V) coefficient arrays for an alternative background sonic series
+    (e.g. nr_ec2.bg_series_at(V0_EC) — the TRUE EC point); default = NS.bg_series (Friedmann)."""
     K = order + 4
-    A, N, om, V = NS.bg_series(K-1)
+    if bgser is None:
+        A, N, om, V = NS.bg_series(K-1)
+    else:
+        A, N, om, V = bgser
     A = np.array(A[:K]); N = np.array(N[:K]); om = np.array(om[:K]); V = np.array(V[:K])
     # pad to length K
     def pad(a):
@@ -44,9 +49,9 @@ def _series_coeffs(kappa, order):
     c['H1'] = A; c['H3'] = (g-2)*om
     return c, K
 
-def laurent_exact(kappa, order=12):
+def laurent_exact(kappa, order=12, bgser=None):
     """Return [R, L0, L1, ..., L_order] (4x4 complex arrays), exact."""
-    c, K = _series_coeffs(kappa, order); k = complex(kappa)
+    c, K = _series_coeffs(kappa, order, bgser); k = complex(kappa)
     Z = sconst(K, 0.0)
     # Gmat - kappa*Ms as 4x4 of series
     Gm = [[c['G1'], Z, c['G3'], c['G4']],
@@ -89,9 +94,9 @@ def laurent_exact(kappa, order=12):
         Ls.append(M)
     return R, Ls
 
-def analytic_modes(kappa, order=14):
+def analytic_modes(kappa, order=14, bgser=None):
     """3 analytic Frobenius modes a_0 in ker(R), recursion (nI-R)a_n = sum_j L_j a_{n-1-j}."""
-    R, Ls = laurent_exact(kappa, order)
+    R, Ls = laurent_exact(kappa, order, bgser)
     U, S, Vh = np.linalg.svd(R)
     ker = [np.conj(Vh[i]) for i in range(4) if abs(S[i]) < 1e-7*max(S.max(), 1)]
     modes = []

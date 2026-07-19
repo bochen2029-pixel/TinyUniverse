@@ -81,14 +81,14 @@ cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\curve_nexus.cpp /Fe:build\curve_ne
 
 **Honest boundary:** static weak-field geodesic oracle — a dynamical GPU metric field with back-reaction is N4+.
 
-# MODULE — fluidcss_nexus (Axis-C crown: radiation-fluid CSS, Stage-A)
+# MODULE — fluidcss_nexus (Axis-C crown, COMPLETE: β measured)
 
-**Purpose.** The Evans–Coleman radiation-fluid CSS critical background in deterministic C++ fp64 (RK4 center→sonic shoot on the central density oi): oi\*=0.3750013 (exact 3/8), sonic point (3/2, 2/√3, 3/4, −1/√3) to ~1e-5, Misner–Sharp 2m/r=1/3 — everything EMERGES, nothing tuned (D-027).
-**Contract:** `contracts/fluidcss_nexus.contract.md` v0.9.1 (Stage-A golden FROZEN; Stage-B scoped — do not change gates). **Oracle:** HKA gr-qc/9607010 §IV exact values + invariants A=1+(2−γ)ω (7.7e-6), N·eˣ const (8.6e-8); grid-convergent 3.8e-6.
-**Golden:** `fluidcss_stageA` `b4f4e463` (`--stageA --golden`).
+**Purpose.** The radiation-fluid critical exponent, measured: the TRUE Evans–Coleman CSS background (Stage A: V₀-shoot per HKA §IV, V₀\*=0.1124394014, N̄'(sonic)=−0.355699, one V-zero) + the relevant perturbation eigenvalue (Stage B: the §V shoot with two analytic gauge controls) ⇒ **κ₀=2.810577211, β=1/κ₀=0.355798800** (lit 2.8105525488/0.35580192; |Δβ|=3.1e-6). D-032.
+**Contract:** `contracts/fluidcss_nexus.contract.md` v1.0.0 (FROZEN; the original G-ANCHOR/G-CONVERGE/G-UNIQUE gates fire unchanged). **Full details:** `substrate/MODULE_fluidcss.md`.
+**Goldens (2/2):** `fluidcss_stageA` `27af7920` (`--stageA --golden`) · `fluidcss_stageB` `9f8587fd` (`--stageB --golden`). *The v0.9.x Stage-A golden `b4f4e463` banked the FRIEDMANN solution mislabeled as EC — superseded (see `goldens/fluidcss_stageA/NOTE.md`); the Friedmann build remains as the `--friedmann` control face.*
 
 ```
 cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\fluidcss_nexus.cpp /Fe:build\fluidcss_nexus.exe /Fo:build\fluidcss_nexus.obj
 ```
 
-**Honest wall (Stage-B):** β=1/κ₀=0.35580192 NOT yet measured, none faked (D-016/D-021). The perturbation operator is PROVEN correct from first principles (D-031; `tournament/gamma/phase4/nr_rederive.py`); the sonic→center shoot surfaces only the gauge mode κ=1 — the wall is the eigenvalue-EXTRACTION method. Next: HKA's Lyapunov time-evolution (§V.G) → κ → β → Stage-B port → v1.0.0. The β research thread lives in `tournament/gamma/phase4/` (`RESULTS_hka_beta.md`).
+**Research thread (Python, higher precision):** `tournament/gamma/phase4/` — `nr_ec2.py` (EC background), `nr_lyap.py` (Lyapunov spectrum κ=2.8105526), `nr_shoot_ec.py` (shoot κ=2.810552374), `RESULTS_hka_beta.md` (the full saga + D-032 addendum).
