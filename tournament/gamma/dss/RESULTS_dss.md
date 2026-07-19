@@ -77,3 +77,21 @@ r_phys plateaus at 0.029 and the **X+ harmonic tail RISES into the truncation ed
 content piles up against KO = 9. The binding constraint is the tau-truncation, not the
 optimizer (Gundlach's own content reaches k ~ 21 at 2N = 128). Next: (48,14,13), then
 (64,20,21) if the k=13 edge still rises.
+
+### (48,14,13) continuation verdict: the OPTIMIZER is now the limiter (diagnosis inverted)
+
+Delta-frozen pinned continuation at the richer truncation: every step stalls at xtol within
+13-43 s (trust region collapse; r_phys 0.66 -> 13.8 rising through the c-ladder) — BUT the
+c=0.10 solve formed genuinely PHYSICAL structure: gdev = 0.26 (strong-field scale) and a
+DECAYING spectrum peaked at k=5 ([0.11, 0.19, 0.30, 0.15, 0.043, 0.022, 0.037] for
+k=1..13). The richer basis can hold the solution; generic scipy trf+lsmr cannot converge
+it. Seed representation also improved (|r| 7.64 -> 3.38 at the same seed).
+
+**Next session's build (ranked):**
+1. **Exact-Newton relaxation solver** (what Gundlach actually used): finite-difference
+   Jacobian on the known block-tridiagonal sparsity, DIRECT sparse solve (spsolve/banded
+   LU — no lsmr regularization), damped line search, both pins; coarse-Nz first.
+2. Better seed: N=1600 evolver + re-bisected p* (cleaner SSH amplitudes, deeper resolvable
+   echo) — the current SSH RMS(X+)=0.07 extraction is ~3-5x low.
+3. Then: release amplitude pin -> release Delta -> Delta vs 3.4453 with the which-solution
+   battery (nonzero decaying tails, no machine-zero, Delta vs Delta/2 impostor).
