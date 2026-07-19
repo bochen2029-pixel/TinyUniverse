@@ -113,7 +113,11 @@ class Relax:
         dXmz = (Cm - E*G*dXm)/(1.0 - P[None, :]*E*G)
         return dG, dXpz, dXmz
 
-    def residual(self, u):
+    def residual(self, u, pin=None):
+        """pin=(c, w): append w*(RMS(X+ at the SSH node) - c) — Gundlach's own normalization
+        device, here used to EXCLUDE THE VACUUM (the trivial solution's watershed captured
+        the unpinned Newton from the physics seed — measured: all harmonics -> 1e-16, and
+        the 1e-28 residual was the tell: a real solution floors at truncation, not zero)."""
         try:
             Delta, xi0, dxi0, G, Xp, Xm, dXp, dXm, B = self.fields(u)
             Be, Bde, Bo, Bdo, Pe, Po = B
@@ -145,16 +149,22 @@ class Relax:
             REG = CmN - np.exp(xi0)*G[-1]*dXm[-1]
             r_ssh_e = Pe@D0
             r_ssh_o = Po@REG
-            return np.concatenate([rg.ravel(), rp.ravel(), rm.ravel(),
-                                   rbc_g, rbc_X, r_ssh_e, r_ssh_o])
+            out = [rg.ravel(), rp.ravel(), rm.ravel(), rbc_g, rbc_X, r_ssh_e, r_ssh_o]
+            if pin is not None:
+                c, w = pin
+                out.append(np.array([w*(np.sqrt(np.mean(Xp[-1]**2)) - c)]))
+            return np.concatenate(out)
         except FloatingPointError:
-            return np.full(31*(self.Nz - 1) + 42, 30.0)
+            n = 31*(self.Nz - 1) + 42 + (1 if pin is not None else 0)
+            return np.full(n, 30.0)
 
     # ---- sparsity for grouped finite differences ----
-    def sparsity(self):
+    def sparsity(self, pin=False):
         from scipy.sparse import lil_matrix
-        nr = 31*(self.Nz - 1) + 42
+        nr = 31*(self.Nz - 1) + 42 + (1 if pin else 0)
         Sp = lil_matrix((nr, self.nu), dtype=np.int8)
+        if pin:
+            Sp[-1, 11 + 31*(self.Nz-1):] = 1             # the pin row: last node's fields
         Sp[:, :11] = 1                                   # Delta + xi0: dense columns
         for k in range(self.Nz - 1):
             r0 = 0
