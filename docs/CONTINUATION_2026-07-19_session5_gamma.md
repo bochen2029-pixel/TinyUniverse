@@ -29,18 +29,21 @@ IS your rehydration; follow §0 exactly. Trust files over prose; verify against 
   the Choptuik critical solution, per **operator-APPROVED** `contracts/similarity_nexus.contract.md`
   v0.1.0 (Gundlach gr-qc/9604019 = `tournament/gamma/GUN96_src/chop2.tex`, gitignored).
   Python research first, then the C++ `substrate/similarity_nexus.cpp` port (the proven fluid pipeline).
-- **POSITION (the furthest point):** the global-relaxation solve at truncation (M,KE,KO) =
-  **(48,14,13)**, amplitude-pinned (c = 0.04 on SSH odd-RMS(X₊)) and Δ-FROZEN at 3.4453, has
-  reached **|r| = 0.135** (LM, checkpoint `tournament/gamma/dss/lm_v1.npy`), gdev = 0.153
-  (strong-field), spectrum peaked at k = 9 (0.228) — still pressing the truncation edge.
-  Trajectory today: seed 782 → 40 → 4.3 (extraction fixes) → 0.93 (hand-rolled-Jacobian
-  Newton) → **0.135 (LM)**. Descending, not stalled.
-- **THE SINGLE NEXT ACTION:** continue LM from `lm_v1.npy` with a bigger budget (it exited
-  'slow', λ ~ 2e-2 — not converged, grinding); THEN escalate truncation to **(64,20,21)**
-  (`R.configure(64,20,21)`; re-extract the seed OR upsample lm_v1 by zero-padding harmonic
-  slots per node — upsampler must map coefficient layouts NE15/NO14 → NE21/NO22); grind to
-  the truncation floor; THEN the release ladder: release the amplitude pin (Δ still frozen)
-  → release Δ → **measure Δ** with the which-solution battery.
+- **POSITION (updated ~13:20): the system is now LOG-g** (`nr_relax` g-slot carries
+  **W = ln g** — positivity by parametrization, after WHICH-SOLUTION CATCH #3: the un-logged
+  (64,20,21) grind fabricated a low-|r| valley with **g < 0** (G.min = −0.457, f ~ 3e5) that
+  Nz=60 evaluation exposed at |r| = 18.2; the log form also makes the g-equation LINEAR
+  (W,z = 1−a²) and the SSH condition log-clean (ξ₀ + W + ln(1+ξ₀′) = 0)). Historical
+  trajectory (un-logged): seed 782 → 4.3 → Newton 0.93 → LM 0.135 (48,14,13 floor) →
+  padded (64,20,21) → 0.273 (UNPHYSICAL, discarded). **The log-g full chain is running**
+  (`logg_chain.log`; checkpoints `logg48.npy`, `logg64.npy`): controls → fresh seed →
+  (48,14,13) LM → pad → (64,20,21) LM.
+- **THE SINGLE NEXT ACTION:** process `logg_chain.log`. If the (64,20,21) log-g grind
+  reaches a floor (~1e-2 or lower) with decaying k=15–21 tails AND g range physical:
+  the release ladder — pin off (Δ frozen) → re-solve → Δ free → re-solve → **measure Δ**
+  with the which-solution battery (tails decaying-nonzero, no machine-zero, g > 0
+  everywhere, Δ ∈ [3.40, 3.49] not ≈1.72). If it plateaus ≳0.1: next levers = Nz 40→60
+  (upsample_u) and/or complex-step Jacobian; then honest wall if exhausted.
 - **HARD CONSTRAINTS:** never fake a number (D-016/D-021/D-032); **the machine-zero tell**
   (|r| ≈ 1e-15 at finite truncation = the VACUUM — check spectral tails EVERY convergence);
   the Δ/2 = 1.72 impostor check; contract gates unchanged; commit early and often; push after

@@ -184,6 +184,7 @@ def build_seed(rx, R, ext, Delta):
         gv = wts*Gg[:, k] + (1 - wts)*Gsyn
         xv = wts*Xg[:, k] + (1 - wts)*Xsyn
         yv = wts*Yg[:, k] + (1 - wts)*Ysyn
+        gv = np.log(np.maximum(gv, 1e-3))     # the relaxation's g-slot carries W = ln g
         gv, xv, yv = rot(gv), rot(xv), rot(yv)
         F[k, :R.NE] = wfit(gv, np.ones(Mph), Bee)
         F[k, R.NE:R.NE+R.NO] = wfit(xv + yv, np.ones(Mph), Boo)

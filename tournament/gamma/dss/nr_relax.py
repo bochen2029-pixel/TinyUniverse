@@ -95,14 +95,18 @@ class Relax:
         B = bases(Delta)
         Be, Bde, Bo, Bdo, Pe, Po = B
         xi0 = Be@xi0c; dxi0 = Bde@xi0c
-        G = gc@Be.T
+        # the g-slot carries W = ln(g): POSITIVITY BY PARAMETRIZATION (the un-logged system
+        # let the optimizer fabricate a low-|r| valley with g < 0 / f ~ 3e5 — measured;
+        # same discipline as substrate_nexus's log-metric integration, D-021). The g-eq
+        # becomes LINEAR: W,z = 1 - a^2.
+        W = gc@Be.T
         Xp = xpc@Bo.T; Xm = xmc@Bo.T
         dXp = xpc@Bdo.T; dXm = xmc@Bdo.T
-        return Delta, xi0, dxi0, G, Xp, Xm, dXp, dXm, B
+        return Delta, xi0, dxi0, W, Xp, Xm, dXp, dXm, B
 
-    def a_rows(self, G, Xp, Xm, xi0, dxi0, zrow, Delta):
-        P = np.broadcast_to(1.0 + dxi0, G.shape).copy()
-        Q = np.exp(-(zrow[:, None] + xi0[None, :]))/G
+    def a_rows(self, W, Xp, Xm, xi0, dxi0, zrow, Delta):
+        P = np.broadcast_to(1.0 + dxi0, W.shape).copy()
+        Q = np.exp(-(zrow[:, None] + xi0[None, :]) - W)       # e^{-(z+xi0)}/g, g>0 always
         Sp = Xp*Xp + Xm*Xm; Sm = Xp*Xp - Xm*Xm
         hh = P*(Sp - 1.0) + Q*Sm
         f = solve_periodic_rows(P, hh, Delta)
@@ -111,45 +115,46 @@ class Relax:
         f = irfft(Ff*mask, M, axis=1)
         return 1.0/np.sqrt(np.maximum(f, 5e-3))
 
-    def rhs_rows(self, G, Xp, Xm, dXp, dXm, xi0, dxi0, zrow, Delta):
-        a = self.a_rows(G, Xp, Xm, xi0, dxi0, zrow, Delta)
+    def rhs_rows(self, W, Xp, Xm, dXp, dXm, xi0, dxi0, zrow, Delta):
+        a = self.a_rows(W, Xp, Xm, xi0, dxi0, zrow, Delta)
         a2 = a*a
-        E = np.exp(zrow[:, None] + xi0[None, :])
+        EG = np.exp(zrow[:, None] + xi0[None, :] + W)          # E*g, positive
         P = 1.0 + dxi0
         Cp = (0.5*(1.0 - a2) - a2*Xm*Xm)*Xp - Xm
         Cm = (0.5*(1.0 - a2) - a2*Xp*Xp)*Xm - Xp
-        dG = (1.0 - a2)*G
-        dXpz = (Cp + E*G*dXp)/(1.0 + P[None, :]*E*G)
-        dXmz = (Cm - E*G*dXm)/(1.0 - P[None, :]*E*G)
-        return dG, dXpz, dXmz
+        dW = 1.0 - a2                                          # (ln g),z — linear!
+        dXpz = (Cp + EG*dXp)/(1.0 + P[None, :]*EG)
+        dXmz = (Cm - EG*dXm)/(1.0 - P[None, :]*EG)
+        return dW, dXpz, dXmz
 
     def residual(self, u, pin=None):
         """pin=(c, w): append w*(RMS(X+ at the SSH node) - c) — the Gundlach normalization
         device, used to EXCLUDE THE VACUUM (measured: the unpinned Newton slid to flat
         space; the 1e-28 residual was the tell — a real solution floors at truncation)."""
         try:
-            Delta, xi0, dxi0, G, Xp, Xm, dXp, dXm, B = self.fields(u)
+            Delta, xi0, dxi0, W, Xp, Xm, dXp, dXm, B = self.fields(u)
             Be, Bde, Bo, Bdo, Pe, Po = B
             Nz, h = self.Nz, self.h
-            Gm = 0.5*(G[:-1] + G[1:]); Xpm = 0.5*(Xp[:-1] + Xp[1:]); Xmm = 0.5*(Xm[:-1] + Xm[1:])
+            Wm = 0.5*(W[:-1] + W[1:]); Xpm = 0.5*(Xp[:-1] + Xp[1:]); Xmm = 0.5*(Xm[:-1] + Xm[1:])
             dXpm = 0.5*(dXp[:-1] + dXp[1:]); dXmm = 0.5*(dXm[:-1] + dXm[1:])
             zm = 0.5*(self.z[:-1] + self.z[1:])
-            dG, dXpz, dXmz = self.rhs_rows(Gm, Xpm, Xmm, dXpm, dXmm, xi0, dxi0, zm, Delta)
-            Rg = (G[1:] - G[:-1]) - h*dG
+            dW, dXpz, dXmz = self.rhs_rows(Wm, Xpm, Xmm, dXpm, dXmm, xi0, dxi0, zm, Delta)
+            Rg = (W[1:] - W[:-1]) - h*dW
             Rp = (Xp[1:] - Xp[:-1]) - h*dXpz
             Rm = (Xm[1:] - Xm[:-1]) - h*dXmz
             rg = Rg@Pe.T; rp = Rp@Po.T; rm = Rm@Po.T
             Y0 = 0.5*(Xp[0] - Xm[0]); X0 = 0.5*(Xp[0] + Xm[0])
             dY0 = 0.5*(dXp[0] - dXm[0])
-            bc_g = G[0] - (1.0 - (Y0*Y0)/3.0)
+            arg = np.maximum(1.0 - (Y0*Y0)/3.0, 1e-6)
+            bc_g = W[0] - np.log(arg)                          # ln g = ln(1 - Y^2/3)
             bc_X = X0 - np.exp(self.zL)*(np.exp(xi0)/3.0)*(dY0 - (1.0 + dxi0)*Y0)
             rbc_g = Pe@bc_g
             rbc_X = Po@bc_X
-            aN = self.a_rows(G[-1:], Xp[-1:], Xm[-1:], xi0, dxi0, self.z[-1:], Delta)[0]
+            aN = self.a_rows(W[-1:], Xp[-1:], Xm[-1:], xi0, dxi0, self.z[-1:], Delta)[0]
             a2N = aN*aN
-            D0 = (1.0 + dxi0)*np.exp(xi0)*G[-1] - 1.0
+            D0 = xi0 + W[-1] + np.log(np.maximum(1.0 + dxi0, 1e-6))   # ln D0 = 0 (even)
             CmN = (0.5*(1.0 - a2N) - a2N*Xp[-1]*Xp[-1])*Xm[-1] - Xp[-1]
-            REG = CmN - np.exp(xi0)*G[-1]*dXm[-1]
+            REG = CmN - np.exp(xi0 + W[-1])*dXm[-1]
             r_ssh_e = Pe@D0
             r_ssh_o = Po@REG
             out = [rg.ravel(), rp.ravel(), rm.ravel(), rbc_g, rbc_X, r_ssh_e, r_ssh_o]
@@ -238,11 +243,9 @@ def upsample_u(rx1, u1, rx2):
 
 def vacuum_control(Nz=40):
     rx = Relax(Nz=Nz)
-    u = np.zeros(rx.nu); u[0] = 3.4453
-    for k in range(rx.Nz):
-        u[NE + NPF*k] = 1.0                    # g = 1 (c0)
+    u = np.zeros(rx.nu); u[0] = 3.4453         # W = ln g = 0 everywhere => g = 1 (vacuum)
     r = rx.residual(u)
-    print(f"[vac-relax] M={M} KE={KE} KO={KO}: |r|max = {np.abs(r).max():.2e}")
+    print(f"[vac-relax] M={M} KE={KE} KO={KO} (log-g): |r|max = {np.abs(r).max():.2e}")
     return np.abs(r).max()
 
 if __name__ == "__main__":

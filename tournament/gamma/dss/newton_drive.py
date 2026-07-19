@@ -102,6 +102,57 @@ def newton(rx, u0, pin=None, freeze_delta=None, max_iter=30, rtol=1e-11, verbose
             return u, n1, 'slow', hist
     return u, np.linalg.norm(r), 'maxiter', hist
 
+def lm(rx, u0, pin=None, freeze_delta=None, max_iter=60, rtol=1e-10, verbose=True):
+    """Levenberg-Marquardt with the hand-rolled Jacobian and DIRECT solves (adaptive
+    damping handles the alpha-collapse valley better than line-searched pure Newton)."""
+    import nr_relax as R
+    from scipy.sparse import identity as speye
+    u = u0.copy()
+    if freeze_delta is not None:
+        u[0] = freeze_delta
+    fun = lambda uu: rx.residual(uu, pin=pin)
+    r = fun(u)
+    lam = 1e-3
+    hist = [np.linalg.norm(r)]
+    for it in range(max_iter):
+        J = jac_fd(rx, R, fun, u, r)
+        if freeze_delta is not None:
+            keep = np.ones(rx.nu, bool); keep[0] = False
+            Jk = J[:, np.where(keep)[0]]
+        else:
+            Jk = J
+        JT = Jk.T.tocsr()
+        JTJ = (JT@Jk).tocsc()
+        g = JT@r
+        D = csr_matrix(np.diag(np.maximum(JTJ.diagonal(), 1e-10)))
+        accepted = False
+        for _ in range(10):
+            try:
+                dx = spsolve((JTJ + lam*D).tocsc(), -g)
+            except Exception:
+                lam *= 4; continue
+            u_try = u.copy()
+            if freeze_delta is not None: u_try[1:] = u[1:] + dx
+            else: u_try = u + dx
+            r_try = fun(u_try)
+            if np.linalg.norm(r_try) < np.linalg.norm(r):
+                u, r = u_try, r_try
+                lam = max(lam/3.0, 1e-10)
+                accepted = True
+                break
+            lam *= 4.0
+        n1 = np.linalg.norm(r)
+        hist.append(n1)
+        if verbose:
+            print(f"    it{it:2d}: |r|={n1:.3e}  lam={lam:.1e}{'' if accepted else '  (REJECTED)'}", flush=True)
+        if not accepted:
+            return u, n1, 'stall', hist
+        if n1 < rtol:
+            return u, n1, 'converged', hist
+        if it > 5 and n1 > 0.9995*hist[-5]:
+            return u, n1, 'slow', hist
+    return u, np.linalg.norm(r), 'maxiter', hist
+
 if __name__ == "__main__":
     M_ = int(sys.argv[1]) if len(sys.argv) > 1 else 48
     KE_ = int(sys.argv[2]) if len(sys.argv) > 2 else 14
