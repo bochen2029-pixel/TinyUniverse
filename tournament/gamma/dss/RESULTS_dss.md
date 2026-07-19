@@ -68,3 +68,12 @@ Primary source: Gundlach gr-qc/9604019 (`../GUN96_src/chop2.tex`, gitignored).*
   seeding** (the cylinder's X₊₀ extraction: iterate the ξ₀-frame; sample deeper echoes at
   N=1600 with a re-bisected p\*); (4) two-parameter arclength continuation (c, Δ) if the
   frozen-Δ path misbehaves.
+
+### Probe verdict (same session): TRUNCATION-BINDING confirmed
+
+Delta-frozen (3.4453) pinned (c=0.25) full-budget solve at (M,KE,KO) = (32,10,9):
+r_phys plateaus at 0.029 and the **X+ harmonic tail RISES into the truncation edge**
+([0.13, 0.20, 0.21, 0.22, 0.44] for k = 1,3,5,7,9) — the strong-field solution's spectral
+content piles up against KO = 9. The binding constraint is the tau-truncation, not the
+optimizer (Gundlach's own content reaches k ~ 21 at 2N = 128). Next: (48,14,13), then
+(64,20,21) if the k=13 edge still rises.
