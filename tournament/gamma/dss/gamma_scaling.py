@@ -49,19 +49,23 @@ def main(N=1600, lo=-4.0, hi=-2.0, n_pts=26):
     x, resid, gam = fit(4, 5, 'M70', rmin)
     fit(6, 7, 'M65', rmin)
     fit(1, 2, 'Mfrz', rmin)
-    # fine structure on the uniform-trigger series: period P = Delta/(2 gamma) in ln(dp)
+    # JOINT slope+wiggle fit (the window holds ~1 period, so the wiggle BENDS a plain
+    # slope — fit y = c + gamma*x + A cos + B sin together, scanning the period P)
+    m = np.isfinite(arr[:, 4]) & (arr[:, 5] >= rmin)
+    xj = np.log(arr[m, 0]); yj = np.log(arr[m, 4])
     best = None
     for P in np.linspace(2.0, 8.0, 601):
-        B = np.vstack([np.cos(2*np.pi*x/P), np.sin(2*np.pi*x/P), np.ones_like(x)]).T
-        cf, *_ = np.linalg.lstsq(B, resid, rcond=None)
-        rr = resid - B@cf
+        B = np.vstack([xj, np.ones_like(xj), np.cos(2*np.pi*xj/P), np.sin(2*np.pi*xj/P)]).T
+        cf, *_ = np.linalg.lstsq(B, yj, rcond=None)
+        rr = yj - B@cf
         sc = float(rr@rr)
         if best is None or sc < best[1]:
-            best = (P, sc, float(np.hypot(cf[0], cf[1])))
-    P, _, amp = best
-    print(f"*** fine-structure[M70]: best period in ln(dp) = {P:.3f}  ->  Delta = 2*gamma*P = "
-          f"{2*gam*P:.3f}   (lit 3.4453; wiggle amplitude {amp:.4f}; window holds "
-          f"{(x.max()-x.min())/P:.2f} periods) ***", flush=True)
+            best = (P, sc, cf, float(np.sqrt(np.mean(rr**2))))
+    P, _, cf, rmsj = best
+    gj = cf[0]; amp = float(np.hypot(cf[2], cf[3]))
+    print(f"*** JOINT[M70]: gamma = {gj:.4f}  period P = {P:.3f}  ->  Delta = 2*gamma*P = "
+          f"{2*gj*P:.3f}   (lit gamma 0.374, Delta 3.4453; wiggle amp {amp:.4f}, "
+          f"joint rms {rmsj:.4f}, window {(xj.max()-xj.min())/P:.2f} periods) ***", flush=True)
 
 if __name__ == "__main__":
     a = sys.argv[1:]

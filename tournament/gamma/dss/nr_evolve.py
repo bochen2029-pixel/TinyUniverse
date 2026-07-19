@@ -120,11 +120,22 @@ class Ev:
             mx = m2r.max()
             # thresholds BELOW the observed freeze floor (min m2r-at-freeze = 0.74 across
             # the p-ladder: the lapse collapses before 2m/r climbs for mid-size BHs) —
-            # every collapsing run crosses these => a truly uniform mass observable
+            # every collapsing run crosses these => a truly uniform mass observable.
+            # Peak located SUB-CELL (parabola through 3 cells): the raw argmax staircases
+            # in dr steps and puts literal plateaus in the mass ladder (measured, run 3).
             for thr in (0.65, 0.70):
                 if thr not in cross and mx >= thr:
                     j = int(np.argmax(m2r))
-                    cross[thr] = (float(self.r[j]), float(0.5*self.r[j]*m2r[j]))
+                    if 0 < j < self.N - 1:
+                        y0, y1, y2 = m2r[j-1], m2r[j], m2r[j+1]
+                        d = (y0 - 2*y1 + y2)
+                        s = 0.5*(y0 - y2)/d if abs(d) > 1e-30 else 0.0
+                        s = float(np.clip(s, -0.5, 0.5))
+                        rp = self.r[j] + s*self.dr
+                        mp = y1 - 0.25*(y0 - y2)*s
+                    else:
+                        rp, mp = self.r[j], m2r[j]
+                    cross[thr] = (float(rp), float(0.5*rp*mp))
             # polar slicing freezes asymptotically (measured: m2r hovers ~0.95, alpha(0)~1e-2,
             # then breaks down numerically) — detect the freeze, not the unreachable limit
             if mx > 0.90 or al[0] < 0.02:

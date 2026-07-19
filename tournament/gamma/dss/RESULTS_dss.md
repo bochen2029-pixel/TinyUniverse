@@ -291,3 +291,35 @@ sparse-Jacobian tooling, and the two vacuum-watershed catches as house law.
   multiplicative bias only ⇒ the slope is clean; under-resolved tail points bend
   visibly in the residuals. Plus the N=3200 p\* bisection → Δ_echo point #3 →
   the [3.216, 3.334, …] resolution series toward 3.4453.
+
+## THE SCALING CAMPAIGN (4 runs, N=1600) — the first direct γ, with its systematics named
+
+*(logs `gamma_scaling{,2,3,4}.log`; data `gamma_scaling.npy`; 26 supercritical runs each,
+δp ∈ [1e-4, 1e-2], p\*(N=1600) = 0.03732817692976)*
+
+- **Run 1 (freeze-mass):** γ = 0.3826 raw → 0.356–0.368 trimmed. Systematics found:
+  (a) **grid-quantized rH below ~8·dr** (identical masses at neighboring δp — the
+  resolvability floor, now a wired-in cut); (b) **the freeze fires on two different
+  triggers across the ladder** (m2r>0.90 vs lapse-collapse α<0.02) — a p-dependent bias.
+- **Run 2 (fixed 2m/r = 0.80/0.85 crossings): instructive failure** — mid-ladder BHs
+  NEVER reach 2m/r = 0.80: the polar lapse collapses first (measured freeze floor
+  m2r = 0.74). The uniform observable must sit BELOW the freeze floor.
+- **Run 3 (0.65/0.70 crossings):** uniform trigger works (zero nans) but the crossing
+  radius **staircases in dr steps** (literal mass plateaus) — worse quantization than
+  the freeze peak.
+- **Run 4 (sub-cell parabolic peak interpolation): the staircase is GONE** — smooth
+  monotone M70(δp). Final fits: **γ[M70] = 0.341 (rms 0.154) · γ[M65] = 0.328 ·
+  γ[Mfrz] = 0.356 (rms 0.104)**. The top of the ladder (δp ≳ 4e-3 = 10–27%
+  supercritical) bends up out of the asymptotic scaling regime; one flagged anomaly at
+  δp = 3.98e-3 (M70 dip — peak-switch candidate, not chased). **The JOINT slope+wiggle
+  fit self-diagnoses as ILL-POSED** (best P slams the scan bound at 0.53 periods of
+  window): with < 1 fine-structure period, the wiggle is degenerate with the slope.
+- **THE N=1600 DELIVERABLE (preliminary, honest):**
+  **γ_scaling = 0.35 ± 0.03 (definition + window systematics), consistent with the
+  literature 0.374.** The first direct measurement of the crown exponent in this
+  project. **The fine-structure Δ is NOT extractable at this window** (needs ≥ 2 wiggle
+  periods ⇒ δp down to ~1e-6 ⇒ AMR-grade resolution — the same D-021 boundary as ever,
+  now measured from the scaling side too).
+- **NEXT:** the N=3200 ladder once the resumed bisection lands p\*(3200) (halved
+  resolvability floor → clean window extends ~half a decade down → sharper γ, wiggle
+  window → ~1.5 periods, still marginal); Δ_echo point #3 from the same bisection.
