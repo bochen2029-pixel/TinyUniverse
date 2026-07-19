@@ -1,4 +1,4 @@
-# CONTRACT — precession (v1 polish: Q-006 resolution) · v1.0.0 · status: BUILDING 2026-07-12
+# CONTRACT — precession (v1 polish: Q-006 resolution) · v1.0.0 · status: FROZEN 2026-07-12 (CLOSED — 3/3 goldens green: sr `a0e180df` · pn1 `db0818f2` · combined `f9df648f`; Q-006 RESOLVED, D-026)
 
 **Purpose.** Resolve **Q-006** (`QUESTIONS.md`; the D-016 withdrawal): the einstein contract claimed a combined **SR-inertia + 1PN-field** perihelion precession of **7π·GM/(c²a(1−e²))** per orbit by *linear superposition* (SR contributes π, the harmonic-1PN field contributes 6π). Measurement gave **6.41π** (stable, fp64), contradicting the sum, so the 1PN term was retired (RAYFORMER protocol) and the app ships SR-only (Sommerfeld-exact). This oracle runs the **fp64 isolation experiments Q-006 owed** and settles the number.
 

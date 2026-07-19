@@ -1,4 +1,4 @@
-# CONTRACT — lapse (v2 N2: the clock) · v1.0.0 · status: BUILDING 2026-07-12
+# CONTRACT — lapse (v2 N2: the clock) · v1.0.0 · status: FROZEN 2026-07-12 (N2 CLOSED — 2/2 goldens green: redshift `e2c75be5` · redshiftPM `3dddb950`; D-023)
 
 **Purpose.** The second rung of the v2 SUBSTRATE ladder (`ROADMAP.md` §3, N2): give the substrate a **clock**. N0 gave the deterministic shell + a critical threshold; N1 `field` gave one self-gravitating field ψ and its Newtonian potential Φ. N2 turns that potential into **proper time**: a per-cell **lapse** α(x) sets how fast each cell's clock runs, and a declared, hashed **proper-time field** τ(x) integrates it. This is the bridge from M2's Newtonian potential to M4's relativistic time — *inside* the substrate:
 

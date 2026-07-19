@@ -1,4 +1,4 @@
-# CONTRACT — curve (v2 N3: geometry curves) · v1.0.0 · status: BUILDING 2026-07-12
+# CONTRACT — curve (v2 N3: geometry curves) · v1.1.0 · status: FROZEN 2026-07-12 (N3 CLOSED — 3/3 goldens green: deflect `4e6c33ca` · precess `67272705` · shapiro `20bfd4d2`; D-024)
 
 **Purpose.** The third rung of the v2 SUBSTRATE ladder (`ROADMAP.md` §3, N3): the **spatial** metric. N2 `lapse` curved *time* (the lapse α = √(1+2Φ/c²) → gravitational redshift, exact). N3 curves *space*: the substrate's potential Φ sources the full weak-field metric
 

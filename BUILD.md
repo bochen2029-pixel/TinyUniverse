@@ -34,6 +34,6 @@ Function-table dispatch via `optix_stubs.h` (`optixInit()` pulls `nvoptix.dll` f
 
 ## Rules
 
-- Every module's MODULE.md records its exact build command; a fresh agent must compile any module from this file + MODULE.md alone, one pass.
-- Selftests < 30 s per module; full golden suite < 5 min.
+- Every module's MODULE.md records its exact build command; a fresh agent must compile any module from this file + MODULE.md alone, one pass. The complete build list (all 9 binaries) is `harness/verify.py --build`.
+- Selftests < 30 s per module. Full golden suite: **~20 min wall** (measured 1179 s cold, 39/39 GREEN, 2026-07-19, on a contended card — the N1 `field_soliton` weld golden alone re-runs ~12 min of imaginary-time iteration, sho3d ~2.5 min). The original "< 5 min" budget predates the v2 GPU ladder; amended 2026-07-19. CPU-only oracles (nexus · substrate · curve · inspiral · precession · fluidcss) clear in ~68 s combined, under any GPU contention.
 - Host≠device libm: pin transcendental KAT values separately per side (liborrery lesson).

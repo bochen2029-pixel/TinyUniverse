@@ -1,4 +1,4 @@
-# CONTRACT — field (v2 N1: the first GPU substrate) · v1.0.0 · status: DRAFT 2026-07-12 (design-only; no GPU build — operator review requested)
+# CONTRACT — field (v2 N1: the first GPU substrate) · v1.0.2 · status: FROZEN 2026-07-12 (N1 CLOSED — 6/6 goldens green; galaxyF deferred Q-N1-1; D-022)
 
 **Purpose.** The first rung of the v2 SUBSTRATE ladder (`docs/PROPOSAL_2026-07-12_v2_substrate.md` §S1): fuse v1's two gravity engines into **one loop over one complex field** on a 3D lattice. The classical particles disappear; a single wavefunction ψ(x,t) carries all matter, and gravity is its own mean-field potential:
 

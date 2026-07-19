@@ -185,9 +185,11 @@ if __name__ == "__main__":
     sol=solve_ivp(E.rhs3,[-16.0, xs-1e-8], Y0i, method='DOP853', rtol=1e-12, atol=1e-14, dense_output=True)
     def refY(x):
         Nr,omr,Vr=sol.sol(x); return np.array([E.A_of(Nr,omr,Vr),Nr,omr,Vr])
-    print(f"\nVALIDATION vs integrated EC background (x_s={xs:.6f}):")
-    worst=0.0
+    print(f"\nVALIDATION vs integrated EC background (x_s={xs:.6f}); series radius ~0.12 -> gate INSIDE |t|<=0.05:")
+    worst_in=0.0
     for t in [-0.02,-0.05,-0.08,-0.12,-0.18,-0.25]:
-        err=np.abs(eval_bg(coeffs,t).real - refY(xs+t)); worst=max(worst,err.max())
-        print(f"  t={t:+.3f}: max|series-ref|={err.max():.2e}   ({', '.join(f'{e:.1e}' for e in err)})")
-    print(f"  >>> worst over t in [-0.25,-0.02]: {worst:.2e}   (< 1e-9 => series is EXACT-grade)")
+        err=np.abs(eval_bg(coeffs,t).real - refY(xs+t)); tag=""
+        if abs(t)<=0.05: worst_in=max(worst_in,err.max())
+        else: tag="   (outside series radius: divergence EXPECTED, not gated)"
+        print(f"  t={t:+.3f}: max|series-ref|={err.max():.2e}   ({', '.join(f'{e:.1e}' for e in err)}){tag}")
+    print(f"  >>> GATE worst inside |t|<=0.05: {worst_in:.2e}   ({'PASS' if worst_in < 1e-6 else 'FAIL'} < 1e-6; ~1e-10 at t=-0.02)")

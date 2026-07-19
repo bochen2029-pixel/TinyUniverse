@@ -1,4 +1,4 @@
-# CONTRACT — inspiral (v1 polish: 2.5PN gravitational-wave inspiral) · v1.0.0 · status: BUILDING 2026-07-12
+# CONTRACT — inspiral (v1 polish: 2.5PN gravitational-wave inspiral) · v1.0.0 · status: FROZEN 2026-07-12 (CLOSED — 2/2 goldens green: circular `2eba79de` · eccentric `4578d3ac`; D-025)
 
 **Purpose.** Resolve the long-owed **2.5PN inspiral** chore (TASKLIST M4/M5 "deferred → 2.5PN inspiral drag → binaries inspiral"; operator queue #3, v1 polish). A relativistic binary radiates **gravitational waves**, losing energy and angular momentum, so its orbit **shrinks and circularizes**, spiralling to merger. This is the leading-order (2.5PN) radiation-reaction effect — the **Peters (1964)** result — and it is the physics behind every LIGO chirp. A clean CPU fp64 oracle, gated against exact GR (analytic Peters formulae), in the `_nexus` family idiom.
 

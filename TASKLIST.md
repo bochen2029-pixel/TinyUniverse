@@ -107,7 +107,7 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - **Gate: MET** — clocks run slow in gravity wells, on the substrate; the redshift is exact Schwarzschild and the substrate's own gravity produces it (D-023).
 
 ### N3 · `curve` — geometry curves ☑ **CLOSED 2026-07-12**
-- ☑ Contract `contracts/curve.contract.md` v1.0.0; tool `substrate/curve_nexus.cpp` (CPU fp64 geodesic oracle — no GPU, runs under any contention, like N0)
+- ☑ Contract `contracts/curve.contract.md` v1.1.0 (v1.0.0 + the shapiro MINOR bump); tool `substrate/curve_nexus.cpp` (CPU fp64 geodesic oracle — no GPU, runs under any contention, like N0)
 - ☑ `curve_deflect` `4e6c33ca`: **light bends at exact GR 4GM/bc²** (0.3–0.75%) — the 1919 **factor of 2 decomposed**: the lapse (time, N2) gives 2GM/bc², the spatial curvature (N3) doubles it (full/lapse = 2.004–2.008 vs exactly 2)
 - ☑ `curve_precess` `67272705`: **perihelion precession** 0.72°/orbit vs exact GR 6πGM/(c²a(1−e²)) — **0.52%** (weak-field, leading 1PN)
 - ☑ `curve_shapiro` `20bfd4d2`: **Shapiro time delay** (excess light-travel time past the mass) vs (4GM/c³)asinh(X₀/b) — **0.33%**. With N2's redshift, this completes **all FOUR classical tests of GR** from the substrate metric (redshift · light-bending · precession · Shapiro)

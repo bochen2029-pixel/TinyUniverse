@@ -41,3 +41,27 @@ Run from the repo root (`--golden` resolves `goldens/nexus/` from CWD). MSVC 202
 - **clang++/g++ parity unverified** on this machine (no non-MSVC toolchain installed) — owed; tracked in TASKLIST M1 chores. Gates are tolerance-based and expected to pass; the golden hash remains MSVC-pinned regardless.
 - N6's R=16 gate carries ~2σ headroom at the frozen seed (measured 0.45% vs 1% gate) — deterministic once frozen, documented here for anyone retuning seeds.
 - Sims prove structure, never metaphysics: nexus verifies the Ratchet *closed form*; what counts as a "record" in-sim is M3's contract.
+
+---
+
+# MODULE — inspiral_nexus (v1 polish: 2.5PN gravitational-wave inspiral)
+
+**Purpose.** Peters-1964 radiation-reaction oracle: binaries merge on the quadrupole clock and eccentric orbits circularize — the 2.5PN physics, closed-form-gated (D-025).
+**Contract:** `contracts/inspiral.contract.md` v1.0.0 (FROZEN). **Oracle:** Peters 1964 closed forms — circular merger time (rel 1.3e-13) + eccentric a(e) circularization track (5e-11).
+**Goldens:** `inspiral_circular` `2eba79de` · `inspiral_eccentric` `4578d3ac` (harness rows, CPU fp64, no GPU).
+
+```
+cl /std:c++17 /EHsc /O2 /W4 /nologo nexus\inspiral_nexus.cpp /Fe:build\inspiral_nexus.exe /Fo:build\inspiral_nexus.obj
+```
+
+**Deferred (declared):** the in-app drag-term integration (so app binaries chirp) + Kepler-at-t_emit rendering.
+
+# MODULE — precession_nexus (v1 polish: Q-006 resolution)
+
+**Purpose.** fp64 isolation experiments that resolved Q-006 (D-026): SR-only, 1PN-field-only, and combined precession, normalized by the orbit's **actual** (force-distorted) semi-latus rectum — measured sr=1.00π · pn1=6.03π · combined=6.95π ⇒ the π+6π=7π superposition is CORRECT; the app's 6.41π was a normalization artifact (nominal p=6.40 vs actual p=6.90). Normalize by what the orbit IS, not its label.
+**Contract:** `contracts/precession.contract.md` v1.0.0 (FROZEN). **Oracle:** exact Sommerfeld + GR closed forms.
+**Goldens:** `precession_sr` `a0e180df` · `precession_pn1` `db0818f2` · `precession_combined` `f9df648f` (harness rows, CPU fp64, no GPU).
+
+```
+cl /std:c++17 /EHsc /O2 /W4 /nologo nexus\precession_nexus.cpp /Fe:build\precession_nexus.exe /Fo:build\precession_nexus.obj
+```

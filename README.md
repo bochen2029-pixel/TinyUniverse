@@ -6,7 +6,7 @@
 
 > The Insta360 "tiny planet" effect bends a flat neighborhood into a whole globe. Tiny Universe does that to physics: retune ħ (up), c (down), G (up) so the crossovers that nature spreads across ~60 orders of magnitude all happen between 1 and ~10⁶ particles — a range one GPU actually simulates. One lone particle is visibly a wave. A hundred decohere into billiards. Ten thousand self-bind. A hundred thousand collapse into a black hole that lenses the sky and evaporates in Hawking fireworks, because here ħ is big. **Nothing switches modes:** the regimes *emerge* from count, density, and speed, the way they do in nature — just closer together.
 
-**Status:** v1 milestones **M0–M7 complete**, v2 substrate **N0 complete** — **22/22 goldens green**, each reproducible cold. Built on a shared, sibling GPU with a 4070 Ti SUPER (16 GB), CUDA 13.1, `sm_89`.
+**Status:** v1 milestones **M0–M7 complete** · v2 substrate ladder **N0–N3 complete** — with the lapse (N2) and curved geometry (N3), **all four classical tests of GR pass on the substrate's own metric** (redshift · light-bending · precession · Shapiro) — plus the 2.5PN inspiral oracle, the Q-006 precession resolution, and the fluid-CSS crown's Stage-A critical background. **39/39 goldens green**, re-verified cold 2026-07-19. Built on a shared, sibling GPU with a 4070 Ti SUPER (16 GB), CUDA 13.1, `sm_89`.
 
 ---
 
@@ -44,6 +44,8 @@ The seam between the simulation core (deterministic, golden-gated, oracle-checke
 | **M6 planck** | quantum mechanics is real — a split-step ψ engine | **the measurement problem, gated**: fringe contrast 0.83 → 0.052 under which-way detection |
 | **M7 cosmos** | the tiny planet — 3-torus wrap, light-history, stereographic projection | a photon laps the universe twice and returns to 3×10⁻⁵ su; EdS cosmology growth to 1% |
 | **v2 N0 substrate** | the substrate oracle — a CPU fp64 spherical Einstein–Klein–Gordon solver | the **Choptuik Type-II critical transition**: black holes forming with mass → 0 at threshold |
+| **v2 N1–N3 field→lapse→curve** | the GPU substrate ladder — the ψ-field gravity weld, the clock, curved geodesics | **all four classical tests of GR from the substrate's own metric**: exact Schwarzschild redshift, light bends 4GM/bc² (the 1919 factor of 2 decomposed), precession 0.52%, Shapiro 0.33%; an SP soliton scale-covariant to 3×10⁻⁸ |
+| **crowns + polish** | 2.5PN inspiral (Peters 1964) · Q-006 resolved · fluid-CSS Stage-A (Evans–Coleman) | binaries merge on the quadrupole clock to 1.3×10⁻¹³; the critical background's central density lands on exactly 3/8 — the β exponent itself is a **named honest wall**, not a faked number |
 
 Details live in [`ARCHITECTURE.md`](ARCHITECTURE.md) (the spec), [`DECISIONS.md`](DECISIONS.md) (every design call and every honest retraction), and [`TASKLIST.md`](TASKLIST.md).
 
@@ -56,7 +58,7 @@ Toolchain (pinned in [`BUILD.md`](BUILD.md)): **CUDA 13.1**, `-arch=sm_89` (RTX 
 nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\tinyuniverse.exe ^
      app\tinyuniverse.cu core\lib\envelope.cpp user32.lib gdi32.lib opengl32.lib cufft.lib
 
-:: verify every physics claim cold — 22/22 green
+:: verify every physics claim cold — 39/39 green (~20 min; CPU-only oracle block ~1 min)
 python harness\verify.py
 ```
 
