@@ -102,7 +102,7 @@ def newton(rx, u0, pin=None, freeze_delta=None, max_iter=30, rtol=1e-11, verbose
             return u, n1, 'slow', hist
     return u, np.linalg.norm(r), 'maxiter', hist
 
-def lm(rx, u0, pin=None, freeze_delta=None, max_iter=60, rtol=1e-10, verbose=True):
+def lm(rx, u0, pin=None, freeze_delta=None, max_iter=60, rtol=1e-10, verbose=True, lam0=1e-3):
     """Levenberg-Marquardt with the hand-rolled Jacobian and DIRECT solves (adaptive
     damping handles the alpha-collapse valley better than line-searched pure Newton)."""
     import nr_relax as R
@@ -112,7 +112,7 @@ def lm(rx, u0, pin=None, freeze_delta=None, max_iter=60, rtol=1e-10, verbose=Tru
         u[0] = freeze_delta
     fun = lambda uu: rx.residual(uu, pin=pin)
     r = fun(u)
-    lam = 1e-3
+    lam = lam0
     hist = [np.linalg.norm(r)]
     for it in range(max_iter):
         J = jac_fd(rx, R, fun, u, r)

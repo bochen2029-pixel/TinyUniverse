@@ -159,8 +159,16 @@ class Relax:
             r_ssh_o = Po@REG
             out = [rg.ravel(), rp.ravel(), rm.ravel(), rbc_g, rbc_X, r_ssh_e, r_ssh_o]
             if pin is not None:
-                c, w = pin
-                out.append(np.array([w*(np.sqrt(np.mean(Xp[-1]**2)) - c)]))
+                if len(pin) == 3 and pin[0] == 'lowk':
+                    # LOW-K pin: RMS of the k<=5 odd harmonics of the SSH-node X+ COEFFICIENTS
+                    # (the total-RMS pin was satisfiable by high-k junk — measured impostor #4:
+                    # the (64,20,21) grind emptied k<7 entirely while holding the RMS pin)
+                    _, _, _, xpc_, _ = self.unpack(u)
+                    amp = np.sqrt(np.mean(xpc_[-1][:6]**2))
+                    out.append(np.array([pin[2]*(amp - pin[1])]))
+                else:
+                    c, w = pin
+                    out.append(np.array([w*(np.sqrt(np.mean(Xp[-1]**2)) - c)]))
             return np.concatenate(out)
         except FloatingPointError:
             n = NPF*(self.Nz - 1) + 2*(NE + NO) + (1 if pin is not None else 0)

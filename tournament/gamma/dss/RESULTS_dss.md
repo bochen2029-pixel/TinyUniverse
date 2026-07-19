@@ -143,3 +143,68 @@ sparse-Jacobian tooling, and the two vacuum-watershed catches as house law.
    Jacobian (kills FD noise in the flat valley).
 3. **k ~ 21 truncation** ((64,20,21)) once descent works.
 4. Then the pin-release ladder + which-solution battery (unchanged).
+
+## SESSION 5 (2026-07-19 afternoon) — three catches, the first healthy state, endgame v1's honest failure
+
+*(recorded in session 6; detail in git `def560c`/`c4ed641`/`e7e174b` + `docs/CONTINUATION_2026-07-19_session5_gamma.md`)*
+
+- **WHICH-SOLUTION CATCH #3 — the g<0 junk valley:** the un-logged (64,20,21) grind
+  fabricated a low-|r| valley with g.min = −0.457 (f ~ 3e5), exposed by Nz=60 evaluation
+  (|r| = 18.2). Fix: the g-slot now carries **W = ln g** (positivity by parametrization;
+  the g-equation becomes LINEAR, W,z = 1 − a²; the SSH condition goes log-clean).
+- **IMPOSTOR #4 — the high-k linear wave:** the log-g chain descended to |r| = 8.8e-3 with
+  ZERO low harmonics (k=1–5 ≈ 0, g ≈ 1) — a near-linear high-frequency wave satisfying the
+  total-RMS pin (the pin doesn't select WHICH harmonics carry the amplitude).
+  **Battery addition: LOW-K DOMINANCE.**
+- **ROOT CAUSE of every diluted seed:** the extraction τ-window sat in the PRE-CRITICAL
+  INFALL (t_G ∈ [1.2, 14.6] but echoes start ≈ 11.8 ⇒ ~70% transient). The clean window is
+  one period inside the echo regime: T ∈ (t\*−t_first_crossing)·[e^{−Δ}, 1].
+- **The center band is unmeasurable during the echo epoch** (the attractor is strong-field
+  at ζ = −2: measured g(−2) = 0.27 vs asymptotic 0.94 — the D-021 resolution wall at
+  extraction level) ⇒ **seed v3 drops Y₁ entirely**; the BVP's node-0 BCs own the center.
+- **FIRST FULLY-HEALTHY STATE** (`v3_48.npy`): |r| = 0.0787 at (48,14,13),
+  g ∈ [0.521, 1.064], LOW-K-DOMINANT decaying tail [0.0499 … 0.015], pin RMS 0.0320 —
+  ALL battery checks green.
+- **ENDGAME v1 VERDICT (`endgame.log`):** pad → (64,20,21) grind reached |r| = 6.9e-3 but
+  DRAINED under the total-RMS pin — g → [0.978, 1.000], tail INVERTED to edge-piling:
+  impostor #4 recurring at higher truncation (the grind emptied k<7 while holding the pin).
+  Pin-release then converged to **THE VACUUM** (|r| = 1.5e-13 machine-zero, all-zero
+  tails — the house tell), and the released Δ sat at its frozen initialization: **the
+  "PRELIMINARY Delta = 3.445300" banner was the INPUT echoed back to 7 digits (zero
+  Δ-gradient in the vacuum), NOT a measurement.** Δ still not measured, none faked.
+- **Dying edits at the context wall** (committed session 6): `pin=('lowk', c, w)` — RMS of
+  the k≤5 odd SSH X₊ COEFFICIENTS, immune to high-k relocation — and `lm(lam0=…)`.
+
+## SESSION 6 (2026-07-19, post-rehydration) — endgame v2: battery-gated low-k ladders
+
+- **Driver `endgame2.py`** (smoke-validated: vacuum exactly 0 at both truncations; the pad
+  reproduces v1's padded |r| = 1.1385 EXACTLY against the lost inline pad; lowk pin row
+  exactly 0 at the measured c = 0.017332; `v3_48` battery GREEN as-is). Ladder = sanity
+  regrind → gated grind → pin-weight RAMP 30→10→3→1→0.3→0.1→0 (drain at any rung =
+  PIN-SUPPORTED/off-manifold verdict) → Δ release (a Δ that does not MOVE from 3.4453 is
+  flagged ZERO-INFORMATION — the suspiciously-exact law).
+- **v2-64 MEASURED VERDICT (`endgame2.log`): the mid-flight gate fired at round 0.** With
+  the lowk pin ON, the (64,20,21) grind took |r| 1.139 → 0.0403 while the battery went
+  UNHEALTHY: the pin held (SSH k≤5 amplitude fixed; low-k interior only −40%; g still
+  [0.611, 1.002]) but the FOUR newly-opened odd harmonics **k = 15–21 blew up in the
+  interior** (0.085 at k=17 vs 0.030 at k=1 — lowk_dominant + tail_decays FAIL). Same
+  low-|r|-but-wrong class as v1, caught immediately instead of at the end. ⇒ **K must be
+  opened GRADUALLY (M-first-then-K), not four harmonics at once** — the optimizer answers
+  fine-collocation residual rows with high-k junk when given the freedom.
+- **run48 VERDICT (`run48.log`, 26 s): the pin releases CLEANLY at the native (48,14,13).**
+  Every rung GREEN — g/tails byte-stable through the full ramp w: 30 → 0 and the state
+  holds |r| = 0.0786 with NO pin at all ⇒ **the healthy state is NOT pin-supported; the
+  vacuum does not swallow it.** BUT the released-Δ banner (3.4453001, drift +8.8e-8) is
+  NOT a measurement: |r| sits on the KNOWN 7.9e-2 LM plateau (~3 orders above the
+  truncation floor) — the optimizer cannot move in ANY direction including Δ, so Δ reports
+  its initialization. **Battery hole found + patched: no absolute-|r| floor check** (it
+  said GREEN on a non-solution). New check: `at_floor(|r| < 5e-3)` required on FINAL
+  before any Δ claim. **The wall at 48³ is now cleanly isolated: the flat-valley plateau
+  itself** (cond ~1e6, mid-cylinder near-null modes — the session-1 diagnosis), not the
+  pin, not the vacuum, not high-k.
+- **nzprobe (in flight): plateau vs Nz (40/60/80)** — decisive discrimination: plateau
+  drops with Nz ⇒ z-discretization inconsistency (the discrete manifold sits ~0.08 from
+  the physical one; path = Nz climb). Plateau flat ⇒ optimizer/valley flatness (path =
+  Ψ-tc pseudo-transient + complex-step Jacobian, session-2 recipe #2).
+- N=3200 p\* bisection hedge in flight (`pstar3200.log`) → third point for the in-house
+  Δ_echo resolution series [3.216, 3.334, …] → 3.4453.
