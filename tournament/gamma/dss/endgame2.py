@@ -51,9 +51,13 @@ def lowk_amp(rx, u):
     _, _, _, xpc, _ = rx.unpack(u)
     return float(np.sqrt(np.mean(xpc[-1][:6]**2)))
 
-def battery(rx, u, label, rn=None):
+def battery(rx, u, label, rn=None, mid=False):
     """The which-solution battery, printed + gated. Healthy reference (v3_48):
-    g=[0.521,1.064], tail [0.0499 ... 0.015] decaying, lowk-dominant."""
+    g=[0.521,1.064], tail [0.0499 ... 0.015] decaying, lowk-dominant.
+    mid=True gates only on CATASTROPHE (drain/vacuum/Delta) — the tail-shape checks are
+    NOT valid mid-ladder (runMK-r0 measured: a KO-truncated basis at honest collocation
+    aliases the missing k>KO content into its edge harmonics; intermediate rungs are
+    EXPECTED edge-loaded until K opens). Tail shape + at_floor gate the FINAL state."""
     D, xi0c, gc, xpc, xmc = rx.unpack(u)
     Be, Bde, Bo, Bdo, Pe, Po = R.bases(D)
     g = np.exp(gc@Be.T)
@@ -70,11 +74,16 @@ def battery(rx, u, label, rn=None):
     }
     if rn is not None and label.endswith('FINAL'):
         checks[f'at_floor(|r|<{FLOOR:g})'] = rn < FLOOR
-    ok = all(checks.values())
+    gated = [k for k in checks if mid is False or not k.startswith(('lowk_dominant', 'tail_decays'))]
+    ok = all(checks[k] for k in gated)
+    warns = [k for k in checks if k not in gated and not checks[k]]
     ts = " ".join(f"{t:.4f}" for t in tail)
     extra = f"  |r|={rn:.3e}" if rn is not None else ""
     print(f"  [battery:{label}] Delta={D:.7f}  g=[{g.min():.3f},{g.max():.3f}]  tail=[{ts}]{extra}", flush=True)
-    print(f"  [battery:{label}] {'GREEN' if ok else 'FAIL: ' + ', '.join(k for k, v in checks.items() if not v)}", flush=True)
+    status = 'GREEN' if ok else 'FAIL: ' + ', '.join(k for k in gated if not checks[k])
+    if warns:
+        status += f"  (ungated mid-ladder warns: {', '.join(warns)})"
+    print(f"  [battery:{label}] {status}", flush=True)
     return ok
 
 def load48():
@@ -331,10 +340,13 @@ def runMK():
         print(f"[MK] rung ({M2},{KE2},{KO2}): raw|r|={np.linalg.norm(rx.residual(u)):.4f}", flush=True)
         m = hi_mask(rx, KEp, KOp)
         for eps in ((1.0, 0.1, 0.0) if m.any() else (0.0,)):
-            u, rn, st = lm_tik(rx, u, m, eps, pin=('vec', vec, 30.0), freeze_delta=LIT, max_iter=30)
+            for _ in range(3):
+                u, rn, st = lm_tik(rx, u, m, eps, pin=('vec', vec, 30.0), freeze_delta=LIT, max_iter=30)
+                if st != 'maxiter':
+                    break
             print(f"[MK] ({M2},{KE2},{KO2}) eps={eps:g}: {st}  |r|={rn:.4e}", flush=True)
         np.save('runMK_cur.npy', u)
-        if not battery(rx, u, f'MK-{M2}-{KE2}-{KO2}', rn):
+        if not battery(rx, u, f'MK-{M2}-{KE2}-{KO2}', rn, mid=True):
             print(f"[VERDICT] runMK broke at rung ({M2},{KE2},{KO2}) — that rung is where "
                   f"the basis/optimizer loses the physics. None faked.", flush=True); return
         KEp, KOp = KE2, KO2
@@ -349,7 +361,7 @@ def runMK():
                 break
         print(f"[MK] Nz={Nz2}: {st}  |r|={rn:.4e}", flush=True)
         np.save('runMK_cur.npy', u)
-        if not battery(rx, u, f'MK-Nz{Nz2}', rn):
+        if not battery(rx, u, f'MK-Nz{Nz2}', rn, mid=True):
             print(f"[VERDICT] runMK broke at Nz={Nz2}. None faked.", flush=True); return
     u, verdict = ramp_release(rx, u, lowk_amp(rx, u), 'runMK')
     print(f"[runMK] verdict: {verdict}  ({time.time()-t00:.0f}s)", flush=True)

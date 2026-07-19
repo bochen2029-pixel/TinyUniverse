@@ -226,12 +226,23 @@ sparse-Jacobian tooling, and the two vacuum-watershed catches as house law.
 - **Pin evolution: `pin=('vec', c6, w)`** — the 6 SSH X₊ coefficients clamped
   INDIVIDUALLY (not relocatable). Bug-catalog addition: **RMS-form pins (total AND
   lowk) are relocatable; only a vector pin is not.**
-- **runMK (in flight): the converged-rung ladder** — never be far: rung 0 = the pure
-  M-jump 48→64 at (14,13) (same basis, same u, finer collocation — directly measures
-  the aliasing-hidden error and whether the old basis can close it); then K opens TWO
+- **runMK design: the converged-rung ladder** — never be far: rung 0 = the pure M-jump
+  48→64 at (14,13) (same basis, same u, finer collocation — directly measures the
+  aliasing-hidden error and whether the old basis can close it); then K opens TWO
   harmonics per rung from a CONVERGED state (annealed Tikhonov on just the newest;
   vector pin at w=30 throughout); then Nz climbs 40→50→60; then ramp + Δ release with
-  `at_floor`. Whichever rung breaks names the wall exactly; if none break, the FINAL
-  battery + floor decide whether a preliminary Δ exists.
+  `at_floor`.
+- **runMK rung-0 MEASUREMENTS (`runMK.log`):** (a) **the VECTOR pin defeated the drain**
+  — first far-state grind (raw |r| = 0.83) that kept g strong-field ([0.505, 1.101])
+  instead of collapsing: the drain pathology of v1/v2-64/A0 is CLOSED by clamping the 6
+  SSH coefficients individually. (b) The M-jump quantifies the aliasing-hidden error:
+  the 48-collocated |r| = 0.079 becomes 0.83 raw / **0.117 re-ground at M=64** — the
+  KO=13 basis floors at ~0.1 under honest collocation, with the missing k>13 content
+  aliased into its edge harmonics (tail flat/edge-elevated). (c) **Gate-design lesson:
+  tail-shape checks are INVALID mid-ladder** — a KO-truncated basis at honest
+  collocation is EXPECTED edge-loaded until K opens; the first runMK aborted itself on
+  exactly this. Mid-rungs now gate on catastrophe only (drain/vacuum/Δ-band, warns
+  printed for the rest); tail shape + `at_floor` gate the FINAL. runMK v2 relaunched
+  (`runMK2.log`).
 - N=3200 p\* bisection hedge in flight (`pstar3200.log`) → third point for the in-house
   Δ_echo resolution series [3.216, 3.334, …] → 3.4453.
