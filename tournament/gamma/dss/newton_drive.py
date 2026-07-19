@@ -12,11 +12,48 @@ from scipy.optimize._numdiff import approx_derivative, group_columns
 import nr_relax as R
 import nr_evolve as E
 
+def jac_fd(rx, R, fun, u, r0, h=1e-6):
+    """Hand-rolled sparse FD Jacobian: explicit per-column probes for the NE dense
+    columns (Delta + xi0), 3-coloring over nodes for the block-tridiagonal band
+    (midpoint stencils span nodes k,k+1 — nodes 3 apart never share a residual block).
+    Built because scipy's grouped approx_derivative silently returned EXACT-ZERO columns
+    for near-zero dense entries (measured: manual dR/du = 1.8e3 where scipy gave 0)."""
+    NE, NPF, Nz = R.NE, R.NPF, rx.Nz
+    nr = len(r0)
+    J = np.zeros((nr, rx.nu))
+    for c in range(NE):                                   # dense columns, one by one
+        up = u.copy(); up[c] += h
+        J[:, c] = (fun(up) - r0)/h
+    nblk = NE + 2*R.NO                                    # residual rows per interior block
+    for color in range(3):
+        for off in range(NPF):
+            up = u.copy()
+            cols = [NE + NPF*k + off for k in range(color, Nz, 3)]
+            for c in cols: up[c] += h
+            dr = (fun(up) - r0)/h
+            for k in range(color, Nz, 3):
+                c = NE + NPF*k + off
+                rows = []
+                for kk in (k - 1, k):                     # interior blocks touching node k
+                    if 0 <= kk < Nz - 1:
+                        rows += list(range(R.NE*kk, R.NE*(kk+1)))
+                        r1 = R.NE*(Nz-1)
+                        rows += list(range(r1 + R.NO*kk, r1 + R.NO*(kk+1)))
+                        r2 = r1 + R.NO*(Nz-1)
+                        rows += list(range(r2 + R.NO*kk, r2 + R.NO*(kk+1)))
+                if k == 0:
+                    rb = NPF*(Nz-1)
+                    rows += list(range(rb, rb + R.NE + R.NO))
+                if k == Nz - 1:
+                    rb = NPF*(Nz-1) + R.NE + R.NO
+                    rows += list(range(rb, nr))
+                J[rows, c] = dr[rows]
+    return csr_matrix(J)
+
 def newton(rx, u0, pin=None, freeze_delta=None, max_iter=30, rtol=1e-11, verbose=True):
     """Damped exact Newton. pin=(c,w) appends the amplitude row (overdetermined by 1 ->
     normal-equations step). freeze_delta: hold u[0] fixed (drop its column)."""
-    spar = rx.sparsity(pin=(pin is not None)).tocsc()
-    groups = group_columns(spar)
+    import nr_relax as R
     u = u0.copy()
     if freeze_delta is not None:
         u[0] = freeze_delta
@@ -24,9 +61,7 @@ def newton(rx, u0, pin=None, freeze_delta=None, max_iter=30, rtol=1e-11, verbose
     r = fun(u)
     hist = [np.linalg.norm(r)]
     for it in range(max_iter):
-        J = approx_derivative(fun, u, method='2-point', rel_step=1e-7,
-                              sparsity=(spar, groups))
-        J = csr_matrix(J)
+        J = jac_fd(rx, R, fun, u, r)
         if freeze_delta is not None:
             keep = np.ones(rx.nu, bool); keep[0] = False
             Jk = J[:, np.where(keep)[0]]
