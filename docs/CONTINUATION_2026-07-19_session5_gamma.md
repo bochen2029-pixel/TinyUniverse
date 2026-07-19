@@ -49,11 +49,20 @@ IS your rehydration; follow §0 exactly. Trust files over prose; verify against 
   high-k-only state is the linear-wave impostor). Echo-aligned chain running
   (`echo_chain.log`, checkpoint `echo48.npy`; pin re-derived from the echo-true SSH
   amplitude).
-- **THE SINGLE NEXT ACTION:** process `echo_chain.log`; if the echo-true seed grinds to a
-  floor with LOW-K-DOMINANT decaying spectrum and physical g: pad → (64,20,21) → release
-  ladder (pin off, Δ frozen → Δ free) → **measure Δ** with the full battery (now 5 checks:
-  tails decaying-nonzero, no machine-zero, g>0, low-k dominance, Δ ∈ [3.40,3.49] ≠ 1.72).
-  Else: Nz=60 / complex-step Jacobian levers, then honest wall.
+- **UPDATE (~14:00): FIRST FULLY-HEALTHY STATE.** Two more catches en route: the echo
+  window's center band is UNMEASURABLE (the attractor is strong-field at ζ=−2 — measured
+  g(−2)=0.27 vs asymptotic 0.94 — the true asymptotic zone is sub-grid at any reachable
+  uniform-r resolution during the echo epoch: the D-021 wall at extraction level) ⇒
+  **seed v3 drops Y₁ entirely** (`build_seed_v3`: data rows ζ ≥ −2 from the echo window,
+  decay continuation below — the BVP's pointwise node-0 BCs own the center). Result:
+  seed |r| = 9.15 → grind **|r| = 0.0787 at (48,14,13)** with ALL battery checks green
+  (g ∈ [0.52, 1.06], LOW-K-DOMINANT decaying tail [0.050, 0.035, ..., 0.015], no
+  machine-zero). Checkpoint `v3_48.npy`.
+- **RUNNING: the ENDGAME chain** (`endgame.log`): pad → (64,20,21) grind → pin release
+  (Δ frozen) → **Δ release → preliminary Δ measurement** with battery prints at each stage
+  (checkpoints `v3_64.npy`, `v3_nopin.npy`, `v3_final.npy`). N=3200 p\* bisection hedge
+  also in flight (`pstar3200.log`). If Δ lands in [3.40, 3.49]: convergence checks
+  (Nz 40→60, truncation stationarity) → record as PRELIMINARY → then Stage-B Floquet.
 - **HARD CONSTRAINTS:** never fake a number (D-016/D-021/D-032); **the machine-zero tell**
   (|r| ≈ 1e-15 at finite truncation = the VACUUM — check spectral tails EVERY convergence);
   the Δ/2 = 1.72 impostor check; contract gates unchanged; commit early and often; push after

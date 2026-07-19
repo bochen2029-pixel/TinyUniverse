@@ -117,12 +117,17 @@ def extract(cyl, Delta, Mph=64, T_lo=0.55, zg=np.linspace(-6.0, 0.9, 140)):
             A = np.column_stack([np.exp(zb[m]), np.exp(3*zb[m])])
             y1_est[i] = np.linalg.lstsq(A, Yb[i][m], rcond=None)[0][0]
             wgt[i] = m.sum()
+    # ECHO-WINDOW reality: only the large-T fraction of phases has center coverage (~40%
+    # at N=1600) — an unregularized 6-dof fit on a 40% arc blew up (measured RMS(Y1)=33).
+    # Ridge-regularized k<=3 reconstruction is rank-safe on partial arcs.
     th = 2*np.pi*np.arange(Mph)/Mph
-    H = np.column_stack([np.cos(th), np.sin(th), np.cos(3*th), np.sin(3*th),
-                         np.cos(5*th), np.sin(5*th)])
+    H = np.column_stack([np.cos(th), np.sin(th), np.cos(3*th), np.sin(3*th)])
     good = wgt > 0
     W = np.sqrt(wgt[good])
-    coef = np.linalg.lstsq(H[good]*W[:, None], y1_est[good]*W, rcond=None)[0]
+    A = H[good]*W[:, None]; b = y1_est[good]*W
+    AtA = A.T@A
+    lam = 1e-2*np.trace(AtA)/AtA.shape[0]
+    coef = np.linalg.solve(AtA + lam*np.eye(4), A.T@b)
     Y1 = H@coef
     zs = np.linspace(-0.6, 0.0, 14)
     Xs, Ys, Gs = gauged(zs)
@@ -132,6 +137,61 @@ def extract(cyl, Delta, Mph=64, T_lo=0.55, zg=np.linspace(-6.0, 0.9, 140)):
     return dict(taus=taus, xi0=xi0, dxi0=dxi0, Y1=Y1, Xp0=Xp0, gauged=gauged, rmin=rmin,
                 Delta=Delta,
                 rmsY1=float(np.sqrt(np.mean(Y1**2))), rmsXp0=float(np.sqrt(np.mean(Xp0**2))))
+
+def build_seed_v3(rx, R, ext, Delta, z_data=-2.0):
+    """Seed v3 — NO Y1 fitting (measured: the center-asymptotic zone is sub-grid at any
+    reachable resolution during the echo epoch — the attractor's strong-field structure
+    extends to z ~ -2 (g(-2) = 0.27 measured vs the asymptotic prediction 0.94), so
+    center boundary functions are UNMEASURABLE from uniform-r data; the BVP's pointwise
+    node-0 BCs own the center instead). Data rows for z >= z_data (resolvable in the echo
+    window), smooth decay continuation below: X,Y ~ e^{z-z_data}*row(z_data), ln g -> 0."""
+    Mph = len(ext['xi0'])
+    taus = ext['taus']; xi0v = ext['xi0']
+    rmin = ext['rmin']
+    th = 2*np.pi*np.arange(Mph)/Mph
+    c2 = 2*np.mean(xi0v*np.cos(2*th)); s2 = 2*np.mean(xi0v*np.sin(2*th))
+    ph2 = 0.5*np.arctan2(s2, c2)
+    def rot(f):
+        F = np.fft.rfft(f); kk = np.arange(len(F))
+        return np.fft.irfft(F*np.exp(1j*kk*ph2), len(f))
+    phi = th*Delta/(2*np.pi)
+    w0 = 2*np.pi/Delta
+    Bee = np.zeros((Mph, R.NE)); Bee[:, 0] = 1.0
+    j = 1
+    for k in range(2, R.KE+1, 2):
+        Bee[:, j] = np.cos(k*w0*phi); Bee[:, j+1] = np.sin(k*w0*phi); j += 2
+    Boo = np.zeros((Mph, R.NO))
+    j = 0
+    for k in range(1, R.KO+1, 2):
+        Boo[:, j] = np.cos(k*w0*phi); Boo[:, j+1] = np.sin(k*w0*phi); j += 2
+    def wfit(vals, wts, B):
+        W = np.sqrt(np.maximum(wts, 1e-12))[:, None]
+        A = B*W; b = vals*W[:, 0]
+        AtA = A.T@A
+        lam = 1e-3*np.trace(AtA)/AtA.shape[0]
+        return np.linalg.solve(AtA + lam*np.eye(B.shape[1]), A.T@b)
+    Xg, Yg, Gg = ext['gauged'](rx.z)
+    u = np.zeros(rx.nu)
+    u[0] = Delta
+    xc = wfit(rot(xi0v), np.ones(Mph), Bee)
+    u[1] = xc[0]; u[2] = xc[1]; u[3:R.NE] = xc[3:]
+    # reference row at z_data (the deepest well-measured level)
+    kref = int(np.argmin(np.abs(rx.z - z_data)))
+    F = np.zeros((rx.Nz, R.NPF))
+    for k, zG in enumerate(rx.z):
+        ks = max(k, kref)                              # sample at z_data for deeper nodes
+        rs = np.exp(taus)*np.exp(rx.z[ks] + xi0v)
+        wts = np.clip(np.log(np.maximum(rs, 1e-12)/rmin)/np.log(3.0), 0.05, 1.0)
+        dec = 1.0 if k >= kref else np.exp(rx.z[k] - rx.z[kref])
+        gv = np.log(np.maximum(Gg[:, ks], 1e-3))*(1.0 if k >= kref else dec**2)
+        xv = Xg[:, ks]*dec
+        yv = Yg[:, ks]*dec
+        gv, xv, yv = rot(gv), rot(xv), rot(yv)
+        F[k, :R.NE] = wfit(gv, wts, Bee)
+        F[k, R.NE:R.NE+R.NO] = wfit(xv + yv, wts, Boo)
+        F[k, R.NE+R.NO:] = wfit(xv - yv, wts, Boo)
+    u[R.NE:] = F.ravel()
+    return u
 
 def build_seed(rx, R, ext, Delta):
     """Full-field relaxation seed: EVERY node row fit by resolvability-WEIGHTED harmonic
