@@ -323,3 +323,28 @@ sparse-Jacobian tooling, and the two vacuum-watershed catches as house law.
 - **NEXT:** the N=3200 ladder once the resumed bisection lands p\*(3200) (halved
   resolvability floor → clean window extends ~half a decade down → sharper γ, wiggle
   window → ~1.5 periods, still marginal); Δ_echo point #3 from the same bisection.
+
+## Δ_echo #3 (N=3200) — the point that AMENDS the echo route (`echo3200.log`)
+
+- **p\*(N=3200) = 0.03739102496155509 (bracket 8e-17**, resumed from the orphaned
+  session's 8/46 state, `pstar3200b.log`). Resolution series p\*(800/1600/3200) =
+  0.0375166 / 0.0373282 / 0.0373910 — converging geometrically (ratio ~⅓).
+- **Δ_echo(N=3200) = 3.093 — NON-monotone: [3.216, 3.334, 3.093] breaks the trend.**
+  Diagnosis from the crossing data (11 crossings, t\* = 14.115 ± 0.028): the
+  pair-estimator's in-band pairs are precisely the UNRELIABLE ones — the first crossing
+  sits at the echo-regime edge and the last (T = 0.050, 0.013) inside the t\*-fit noise
+  (3·spread = 0.085).
+- **THE AMENDMENT (RAYFORMER — the falsifying point was the measurement, not the
+  trend-reading):** with honest floors (T > 3·t\*_spread AND r > 6·dr), the clean echo
+  regime spans **ln(T_first/T_floor) ≈ 3.0 in τ at EVERY uniform resolution tested —
+  UNDER one full period (Δ = 3.4453)**. The prior "resolution-convergent toward 3.4453"
+  reading leaned on edge crossings; retire it. Session-1's original caution ("~1.2
+  *resolvable* periods — honest bound, not a claim") was counting to the 1·dr floor;
+  the clean-floor count is < 1 period.
+- **THE Δ-SIDE CLOSE AT UNIFORM GRID — one boundary, measured three independent ways:**
+  (1) BVP: the extraction's center band is sub-grid during the echo epoch (seed-v3
+  finding); (2) scaling: the fine-structure window holds < 1 wiggle period (joint fit
+  self-diagnoses ill-posed); (3) echo: the clean regime spans < 1 period in τ.
+  **Δ on this substrate honestly requires AMR (D-021 — now a measured triple, not a
+  policy).** The γ crown's Δ co-target moves to the N4-GPU/AMR stage with the BVP
+  machinery (all-green ladder + battery + at_floor) ready to receive it.
