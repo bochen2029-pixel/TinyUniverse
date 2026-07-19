@@ -95,3 +95,19 @@ it. Seed representation also improved (|r| 7.64 -> 3.38 at the same seed).
    echo) — the current SSH RMS(X+)=0.07 extraction is ~3-5x low.
 3. Then: release amplitude pin -> release Delta -> Delta vs 3.4453 with the which-solution
    battery (nonzero decaying tails, no machine-zero, Delta vs Delta/2 impostor).
+
+### Exact-Newton + conditioning probes (same session): the SEED is the common denominator
+
+- Exact-Newton (direct sparse solves + backtracking): line search never accepts alpha > 0.03;
+  |r| creeps 3.38 -> 1.85 and plateaus at every c — the Jacobian's predicted descent does
+  not materialize. The a-clamp is EXONERATED (f in [0.32, 1.0] at the seed; no kink).
+- Jacobian conditioning at the seed (Delta-frozen, pinned): cond ~ 1.3e6; the smallest
+  singular directions (1.7e-3..1e-2) are MID-CYLINDER field rearrangements (z ~ -1.5..-3.2,
+  mixed g/X+-; not xi0, not boundary modes) — the causally-weakly-pinned interior valley,
+  characteristic of advection-dominated BVPs seeded far from the solution.
+- ALL FIVE solver campaigns (LM-shoot, trf cliffs, trf-relax, pinned continuations,
+  exact-Newton) now agree by measurement: the binding constraint is SEED QUALITY (the
+  cylinder extraction from the N=800 run underestimates SSH amplitudes ~3-5x and carries
+  frame/interpolation inconsistency). N=1600 re-bisection launched (needed by every future
+  path). Secondary levers for session 2: pseudo-transient continuation (Psi-tc damped
+  Newton), complex-step Jacobian, k~21 truncation (Gundlach 2N=128).
