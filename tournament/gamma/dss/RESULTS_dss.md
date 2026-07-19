@@ -202,9 +202,23 @@ sparse-Jacobian tooling, and the two vacuum-watershed catches as house law.
   before any Δ claim. **The wall at 48³ is now cleanly isolated: the flat-valley plateau
   itself** (cond ~1e6, mid-cylinder near-null modes — the session-1 diagnosis), not the
   pin, not the vacuum, not high-k.
-- **nzprobe (in flight): plateau vs Nz (40/60/80)** — decisive discrimination: plateau
-  drops with Nz ⇒ z-discretization inconsistency (the discrete manifold sits ~0.08 from
-  the physical one; path = Nz climb). Plateau flat ⇒ optimizer/valley flatness (path =
-  Ψ-tc pseudo-transient + complex-step Jacobian, session-2 recipe #2).
+- **nzprobe VERDICT (`nzprobe.log`) — the diagnosis that unifies every failure this
+  session:** the plateau is NOT Nz-independent. At Nz=60 the LM descends 7.86e-2 →
+  2.65e-2 (still descending at maxiter) — **but by piling content against the KO=13
+  edge** (tail 0.0156 → 0.1327 RISING; battery FAIL), the session-1 truncation-binding
+  signature. Nz=80 stalls earlier (6.19e-2), battery marginal. Reading: **finer z
+  resolves the sharp SSH-adjacent structure whose τ-content genuinely reaches k~21
+  (Gundlach's own content) ⇒ either axis refined ALONE distorts — the solution needs the
+  JOINT target (KO=21) × (Nz≥60)** — and v2-64 measured that opening that much freedom
+  at once gets filled with junk. Also measured: the Nz=40 state carries node-scale
+  z-roughness (raw upsampled |r| = 8.3 at Nz=60) — the valley's near-null mid-cylinder
+  modes ARE node-scale wiggles.
+- **runA (in flight): the joint ladder** — pad → (64,20,21), Nz 40→60, with the new
+  harmonics (even k≥16, odd k≥15, every node + ξ₀) held by an **annealed spectral
+  Tikhonov penalty** (`lm_tik`: augmented objective |r|² + ε²|S·u|², ε: 10 → 0, penalty
+  analytic in the normal equations): the basis gets the room the physics needs, the
+  optimizer gets the freedom only as the anneal grants it. Then pin ramp + Δ release
+  with `at_floor` enforced. If the battery breaks at some ε, that ε is where junk beats
+  physics — recorded either way.
 - N=3200 p\* bisection hedge in flight (`pstar3200.log`) → third point for the in-house
   Δ_echo resolution series [3.216, 3.334, …] → 3.4453.

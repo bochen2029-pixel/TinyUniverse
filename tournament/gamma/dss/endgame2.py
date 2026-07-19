@@ -188,6 +188,111 @@ def run48():
     u, verdict = ramp_release(rx1, u, c48, 'r48')
     print(f"[run48] verdict: {verdict}  ({time.time() - t00:.0f}s)", flush=True)
 
+def hi_mask(rx):
+    """0/1 mask over u marking EXACTLY the coefficients absent from (48,14,13): even
+    harmonics k>=16 (index >= 15) and odd harmonics k>=15 (index >= 14), at every node
+    and in xi0. The annealed Tikhonov penalty acts on these — the optimizer only gets the
+    new freedom as fast as the anneal grants it (nzprobe verdict: either axis refined
+    alone lets descent pile junk into whatever modes just opened)."""
+    NE, NO, NPF = R.NE, R.NO, R.NPF
+    m = np.zeros(rx.nu)
+    m[15:NE] = 1.0                                     # xi0 high (u_i = xi0c_i for i>=3)
+    for k in range(rx.Nz):
+        b = NE + NPF*k
+        m[b + 15: b + NE] = 1.0                        # g even k>=16
+        m[b + NE + 14: b + NE + NO] = 1.0              # X+ odd k>=15
+        m[b + NE + NO + 14: b + NPF] = 1.0             # X- odd k>=15
+    return m
+
+def lm_tik(rx, u0, mask, eps, pin=None, freeze_delta=None, max_iter=25, rtol=1e-10, verbose=False, lam0=1e-2):
+    """LM on the AUGMENTED objective |r|^2 + eps^2 |mask*u|^2 (spectral Tikhonov).
+    Mirrors newton_drive.lm; the penalty is linear so it enters the normal equations
+    analytically (no extra FD probes)."""
+    from scipy.sparse import csr_matrix as _csr
+    from scipy.sparse.linalg import spsolve as _sp
+    from newton_drive import jac_fd
+    u = u0.copy()
+    if freeze_delta is not None:
+        u[0] = freeze_delta
+    fun = lambda uu: rx.residual(uu, pin=pin)
+    r = fun(u)
+    e2 = eps*eps
+    phi = lambda uu, rr: float(rr@rr + e2*np.sum((mask*uu)**2))
+    lam = lam0
+    p0 = phi(u, r)
+    for it in range(max_iter):
+        J = jac_fd(rx, R, fun, u, r)
+        if freeze_delta is not None:
+            keep = np.ones(rx.nu, bool); keep[0] = False
+            Jk = J[:, np.where(keep)[0]]; mk = mask[keep]; uk = u[keep]
+        else:
+            Jk = J; mk = mask; uk = u
+        JT = Jk.T.tocsr()
+        JTJ = (JT@Jk).tocsc()
+        g = JT@r + e2*(mk*mk*uk)
+        H0 = JTJ + e2*_csr(np.diag(mk*mk))
+        D = _csr(np.diag(np.maximum(JTJ.diagonal(), 1e-10)))
+        accepted = False
+        for _ in range(10):
+            try:
+                dx = _sp((H0 + lam*D).tocsc(), -g)
+            except Exception:
+                lam *= 4; continue
+            u_try = u.copy()
+            if freeze_delta is not None: u_try[1:] = u[1:] + dx
+            else: u_try = u + dx
+            r_try = fun(u_try)
+            if phi(u_try, r_try) < p0:
+                u, r, p0 = u_try, r_try, phi(u_try, r_try)
+                lam = max(lam/3.0, 1e-10)
+                accepted = True
+                break
+            lam *= 4.0
+        n1 = np.linalg.norm(r)
+        if verbose:
+            print(f"    it{it:2d}: |r|={n1:.3e}  phi={p0:.3e}  lam={lam:.1e}"
+                  f"{'' if accepted else '  (REJECTED)'}", flush=True)
+        if not accepted:
+            return u, n1, 'stall'
+        if n1 < rtol:
+            return u, n1, 'converged'
+    return u, np.linalg.norm(r), 'maxiter'
+
+def runA():
+    """The JOINT ladder (the nzprobe-informed design): target (64,20,21) x Nz=60 — the
+    room the physics needs (Gundlach's content reaches k~21; finer z resolves the sharp
+    SSH-adjacent structure) — with the new freedom ANNEALED in via spectral Tikhonov so
+    the optimizer cannot fill it with junk (v2-64's failure). Then pin ramp + Delta
+    release, at_floor required."""
+    t00 = time.time()
+    R.configure(48, 14, 13); R.vacuum_control()
+    rx1, u48 = load48()
+    c48 = lowk_amp(rx1, u48)
+    # A0: pad tau-truncation at Nz=40, anneal high eps
+    rx2, u2 = pad_to_64(rx1, u48)
+    m2 = hi_mask(rx2)
+    print(f"[A0] padded (64,20,21)@Nz40  |r|={np.linalg.norm(rx2.residual(u2)):.4f}", flush=True)
+    for eps in (10.0, 3.0, 1.0):
+        u2, rn, st = lm_tik(rx2, u2, m2, eps, pin=('lowk', c48, 30.0), freeze_delta=LIT, max_iter=25)
+        print(f"[A0] eps={eps:g}: {st}  |r|={rn:.4e}", flush=True)
+        np.save('runA_64.npy', u2)
+        if not battery(rx2, u2, f'A0-eps{eps:g}', rn):
+            print(f"[ABORT] A0 broke at eps={eps:g}", flush=True); return
+    # A1: upsample Nz 40 -> 60, continue the anneal to zero
+    rx3 = R.Relax(Nz=60)
+    u3 = R.upsample_u(rx2, u2, rx3)
+    m3 = hi_mask(rx3)
+    print(f"[A1] upsampled Nz=60  raw|r|={np.linalg.norm(rx3.residual(u3)):.4f}", flush=True)
+    for eps in (1.0, 0.3, 0.1, 0.03, 0.0):
+        u3, rn, st = lm_tik(rx3, u3, m3, eps, pin=('lowk', c48, 30.0), freeze_delta=LIT, max_iter=25)
+        print(f"[A1] eps={eps:g}: {st}  |r|={rn:.4e}", flush=True)
+        np.save('runA_60.npy', u3)
+        if not battery(rx3, u3, f'A1-eps{eps:g}', rn):
+            print(f"[ABORT] A1 broke at eps={eps:g} — record WHICH eps: that is where junk beats physics", flush=True); return
+    # A2: pin ramp + Delta release (at_floor enforced by the battery on FINAL)
+    u3, verdict = ramp_release(rx3, u3, c48, 'runA')
+    print(f"[runA] verdict: {verdict}  ({time.time()-t00:.0f}s)", flush=True)
+
 def nzprobe():
     """Plateau vs Nz — the decisive discrimination for the 7.9e-2 plateau at (48,14,13):
     if the plateau DROPS as Nz rises, the z-discretization is inconsistent at Nz=40 (the
@@ -211,4 +316,4 @@ def nzprobe():
 
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else 'smoke'
-    {'smoke': smoke, 'run': run, 'run48': run48, 'nzprobe': nzprobe}[mode]()
+    {'smoke': smoke, 'run': run, 'run48': run48, 'nzprobe': nzprobe, 'runA': runA}[mode]()
