@@ -1,4 +1,4 @@
-# CONTRACT — similarity_nexus (scalar-field DSS critical exponent γ, eigenvalue route) · v0.1.0 · status: **DRAFT 2026-07-19 — OPERATOR REVIEW REQUIRED before any source** (contract-first hard rule)
+# CONTRACT — similarity_nexus (scalar-field DSS critical exponent γ, eigenvalue route) · v0.1.0 · status: **OPERATOR-APPROVED 2026-07-19 ("contract approved, proceed with the gamma crown") — BUILDING** (research scaffold first, C++ after Python validation, per the proven fluid pipeline)
 
 **Purpose.** Measure the **Choptuik critical exponent of massless-scalar gravitational collapse** —
 γ ≈ 0.374 — and the **echoing period** Δ ≈ 3.4453, by the eigenvalue route (D-028: γ = −1/Re λ₁ from

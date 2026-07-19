@@ -31,21 +31,36 @@ from numpy.fft import rfft, irfft
 
 # ---------------------------------------------------------------- Fourier layer (period D)
 class F:
-    """Collocation on M uniform tau-points over [0, D). Real fields; operations via rfft."""
+    """Collocation on M uniform tau-points over [0, D). Real fields. All transforms are
+    PRECOMPUTED dense matmuls (numpy rfft has ~10x call overhead at M~32; the residual is
+    evaluated thousands of times in the search — measured 10x speedup)."""
     def __init__(self, M, D):
         self.M = M; self.D = D
         self.tau = np.arange(M)*D/M
-        k = np.arange(M//2 + 1)
+        K = M//2 + 1
+        k = np.arange(K)
         self.omega = 2*np.pi*k/D            # rfft frequencies
+        n = np.arange(M)
+        self.Wf = np.exp(-2j*np.pi*np.outer(k, n)/M)          # forward (== np.fft.rfft)
+        c = np.full(K, 2.0); c[0] = 1.0
+        if M % 2 == 0: c[-1] = 1.0
+        self.Wi = (np.exp(2j*np.pi*np.outer(n, k)/M)*c)/M     # inverse (apply, take .real)
+        # masks
+        kk = np.arange(K)
+        self.mask_even = ((kk % 2 == 0) & (kk <= M//3)).astype(float)
+        self.mask_odd  = ((kk % 2 == 1) & (kk <= M//3)).astype(float)
+        # one-time self-check vs numpy rfft/irfft
+        t = np.cos(2*np.pi*3*n/M) + 0.3*np.sin(2*np.pi*5*n/M)
+        assert np.abs(self.Wf@t - rfft(t)).max() < 1e-10
+        assert np.abs((self.Wi@(self.Wf@t)).real - t).max() < 1e-10
+    def fwd(self, f):  return self.Wf@f
+    def inv(self, F_): return (self.Wi@F_).real
     def dtau(self, f):
-        return irfft(1j*self.omega*rfft(f), self.M)
+        return self.inv(1j*self.omega*self.fwd(f))
     def proj(self, f, parity):
         """Keep only even (parity=0) or odd (parity=1) harmonics; also cut the top 1/3."""
-        F_ = rfft(f)
-        k = np.arange(len(F_))
-        mask = (k % 2 == parity)
-        mask &= (k <= self.M//3)            # dealias-lite
-        return irfft(F_*mask, self.M)
+        m = self.mask_even if parity == 0 else self.mask_odd
+        return self.inv(self.fwd(f)*m)
     def solve_periodic(self, P, h):
         """Unique periodic solution of f' + P f + h = 0 (app C closed form).
         Requires mean(P) != 0 — except the fully degenerate case (P ~ 0 and h ~ 0,
@@ -55,14 +70,12 @@ class F:
             if np.abs(h).max() < 1e-12:
                 return np.zeros_like(h)
             raise FloatingPointError("solve_periodic: mean(P)=0 with h!=0 (no periodic solution)")
-        I0P = irfft(np.concatenate([[0.0], (rfft(Pt)[1:]/(1j*self.omega[1:]))]), self.M)
-        w = np.exp(I0P)                     # integrating factor (periodic part)
-        rhs = w*h
-        R = rfft(rhs)
-        out = np.zeros_like(R)
-        out[0] = R[0]/P0
-        out[1:] = R[1:]/(P0 + 1j*self.omega[1:])
-        return -irfft(out, self.M)/w
+        FP = self.fwd(Pt)
+        I0 = np.zeros_like(FP); I0[1:] = FP[1:]/(1j*self.omega[1:])
+        w = np.exp(self.inv(I0))            # integrating factor (periodic part)
+        R = self.fwd(w*h)
+        out = R/(P0 + 1j*self.omega)
+        return -self.inv(out)/w
 
 # ---------------------------------------------------------------- the field equations
 def a_from_constraint(F_, ab, g, Xp, Xm, xi0, dxi0, zeta):
@@ -75,7 +88,9 @@ def a_from_constraint(F_, ab, g, Xp, Xm, xi0, dxi0, zeta):
     Sm = Xp*Xp - Xm*Xm
     h = P*(Sp - 1.0) + Q*Sm
     f = F_.solve_periodic(P, h)
-    return 1.0/np.sqrt(np.maximum(f, 1e-12)), (ab is None)
+    if f.min() < 0.03 or not np.all(np.isfinite(f)):
+        raise FloatingPointError("a_from_constraint: a^-2 nonpositive (off the physical branch)")
+    return 1.0/np.sqrt(f), (ab is None)
 
 def rhs_z(F_, g, Xp, Xm, xi0, dxi0, zeta):
     """zeta-derivatives of (g, X+, X-) with a from the constraint."""
@@ -154,7 +169,7 @@ def seed_ssh(F_, Xp0, xi0, dxi0, delta):
 class Prob:
     """Unknowns: Delta; xi0 harmonics (even: c0,c2,s2*,c4,s4; s2 = 0 fixed = tau gauge);
     Y1 and X+0 harmonics (odd: c1,s1,c3,s3). Total 1 + 4 + 4 + 4 = 13."""
-    def __init__(self, M=32, zL=-6.0, delta=0.02, zm=-1.0, nstepL=250, nstepR=60):
+    def __init__(self, M=32, zL=-6.0, delta=0.02, zm=-1.0, nstepL=100, nstepR=40):
         self.M = M; self.zL = zL; self.delta = delta; self.zm = zm
         self.nstepL = nstepL; self.nstepR = nstepR
     def fields(self, u):
@@ -166,13 +181,18 @@ class Prob:
         Xp0 = u[9]*np.cos(w*t) + u[10]*np.sin(w*t) + u[11]*np.cos(3*w*t) + u[12]*np.sin(3*w*t)
         return F_, xi0, F_.dtau(xi0), Y1, Xp0
     def residual(self, u):
-        F_, xi0, dxi0, Y1, Xp0 = self.fields(u)
-        gL, XpL, XmL = seed_center(F_, Y1, xi0, dxi0, self.zL)
-        gL, XpL, XmL = march(F_, gL, XpL, XmL, xi0, dxi0, self.zL, self.zm, self.nstepL)
-        gR, XpR, XmR = seed_ssh(F_, Xp0, xi0, dxi0, self.delta)
-        gR, XpR, XmR = march(F_, gR, XpR, XmR, xi0, dxi0, -self.delta, self.zm, self.nstepR)
+        try:
+            F_, xi0, dxi0, Y1, Xp0 = self.fields(u)
+            gL, XpL, XmL = seed_center(F_, Y1, xi0, dxi0, self.zL)
+            gL, XpL, XmL = march(F_, gL, XpL, XmL, xi0, dxi0, self.zL, self.zm, self.nstepL)
+            gR, XpR, XmR = seed_ssh(F_, Xp0, xi0, dxi0, self.delta)
+            gR, XpR, XmR = march(F_, gR, XpR, XmR, xi0, dxi0, -self.delta, self.zm, self.nstepR)
+            if not (np.all(np.isfinite(gL)) and np.all(np.isfinite(gR))):
+                raise FloatingPointError("march nan")
+        except FloatingPointError:
+            return np.full(13, 1e3)
         def harm(f, parity, kmax):
-            R = rfft(f)/self.M
+            R = F_.fwd(f)/self.M
             out = []
             for k in range(0, kmax+1):
                 if k % 2 != parity: continue
@@ -190,7 +210,7 @@ def vacuum_control(M=32):
     print(f"[vacuum] max|residual| = {np.abs(r).max():.2e}   (must be ~1e-14)")
     return np.abs(r).max()
 
-def attempt(seed=None, M=32, verbose=True):
+def attempt(seed=None, M=32, verbose=True, max_nfev=600, fix_delta=False):
     from scipy.optimize import least_squares
     p = Prob(M=M)
     if seed is None:
@@ -200,8 +220,12 @@ def attempt(seed=None, M=32, verbose=True):
         u0[5], u0[6] = 0.0, 0.35    # Y1  ~ 0.35 sin(w tau)
     else:
         u0 = np.array(seed)
+    lo = np.full(13, -4.0); hi = np.full(13, 4.0)
+    lo[0], hi[0] = (u0[0]-1e-9, u0[0]+1e-9) if fix_delta else (3.0, 3.9)
     t0 = time.time()
-    sol = least_squares(p.residual, u0, method='lm', xtol=1e-14, ftol=1e-14, max_nfev=4000)
+    sol = least_squares(p.residual, u0, method='trf', bounds=(lo, hi),
+                        x_scale=np.concatenate([[0.1], np.full(12, 0.5)]),
+                        xtol=1e-14, ftol=1e-12, max_nfev=max_nfev, verbose=2 if verbose else 0)
     if verbose:
         print(f"[attempt] {time.time()-t0:.0f}s  status={sol.status}  |r|={np.linalg.norm(sol.fun):.2e}")
         print(f"  Delta = {sol.x[0]:.6f}   (Gundlach 3.4453 +- 0.0005)")
@@ -210,10 +234,78 @@ def attempt(seed=None, M=32, verbose=True):
         print(f"  X+0   = {sol.x[9:13].round(4)}")
     return sol
 
+def basin_search(M=32, Dfix=3.4453, topn=8,
+                 XI0=(-1.2, -0.8, -0.4, 0.0), AYs=(0.4, 0.6, 1.0, 1.5),
+                 AXs=(0.1, 0.2, 0.3, 0.45, 0.7),
+                 PHR=(-2.75, -2.36, -1.96, -1.57, -1.18, -0.79, 0.0, 0.79, 1.57, 2.36)):
+    """Coarse global search over seed amplitudes at FIXED Delta (lit value). The residual
+    is invariant under a global tau-shift (measured: 4-fold degeneracy in round 1), so the
+    GLOBAL phase is fixed (Y1 pure sin) and only the RELATIVE phase of X+0 is scanned."""
+    p = Prob(M=M)
+    t0 = time.time(); results = []
+    n = 0
+    for x0c in XI0:
+        for AY in AYs:
+            for AX in AXs:
+                for ph in PHR:
+                    u = np.zeros(13); u[0] = Dfix
+                    u[1] = x0c
+                    u[5], u[6] = 0.0, AY                       # Y1 = AY sin(w tau)
+                    u[9], u[10] = AX*np.sin(ph), AX*np.cos(ph) # X+0 phase-shifted
+                    r = p.residual(u)
+                    results.append((np.linalg.norm(r), x0c, AY, AX, ph, u.copy()))
+                    n += 1
+    results.sort(key=lambda t: t[0])
+    print(f"[basin] {n} evals in {time.time()-t0:.0f}s (fixed Delta={Dfix}); top {topn}:")
+    for (rn, x0c, AY, AX, ph, _) in results[:topn]:
+        print(f"  |r|={rn:9.4f}  xi0c0={x0c:+.2f}  A_Y1={AY:.2f}  A_X+0={AX:.2f}  rel-ph={ph:+.2f}")
+    return results
+
+def continuation(M=32, Dfix=3.4453, cs=(0.4, 0.7, 1.0, 1.4, 1.9, 2.5), max_nfev=450):
+    """Amplitude-constrained continuation: the UNCONSTRAINED problem's global minimum is the
+    VACUUM (measured: the basin search slides to zero amplitude — flat space matches at the
+    1.35e-6 seed floor). Pin RMS(Y1) = c by an appended penalty residual and solve the
+    constrained LM at each c: the isolated DSS solution appears as a dip of min|r| at its
+    true amplitude. Delta held at the literature value during the scan."""
+    from scipy.optimize import least_squares
+    p = Prob(M=M)
+    out = []
+    for c in cs:
+        def rc(u):
+            base = p.residual(u)
+            F_, xi0, dxi0, Y1, Xp0 = p.fields(u)
+            rms = np.sqrt(np.mean(Y1*Y1))
+            return np.concatenate([base, [10.0*(rms - c)]])
+        u0 = np.zeros(13); u0[0] = Dfix
+        u0[6] = c*np.sqrt(2.0)          # Y1 ~ c*sqrt2 sin -> RMS ~ c
+        u0[10] = 0.25*c                 # X+0 seeded at the basin's preferred rel-phase
+        lo = np.full(13, -6.0); hi = np.full(13, 6.0)
+        lo[0], hi[0] = Dfix - 1e-9, Dfix + 1e-9
+        t0 = time.time()
+        sol = least_squares(rc, u0, method='trf', bounds=(lo, hi),
+                            x_scale=0.5, xtol=1e-13, ftol=1e-11, max_nfev=max_nfev)
+        rphys = np.linalg.norm(sol.fun[:-1])
+        print(f"  c={c:4.2f}: min|r_phys|={rphys:9.5f}  (pen={sol.fun[-1]:+.1e})  "
+              f"{time.time()-t0:4.0f}s  nfev={sol.nfev}", flush=True)
+        out.append((c, rphys, sol.x.copy()))
+    return out
+
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "vac"
     if mode == "vac":
         vacuum_control()
+    elif mode == "cont":
+        vacuum_control()
+        continuation()
+    elif mode == "basin":
+        vacuum_control()
+        basin_search()
+    elif mode == "polish":
+        # LM polish from the basin's best candidates (Delta freed)
+        res = basin_search()
+        for i in range(3):
+            print(f"\n=== polish candidate {i} (|r0|={res[i][0]:.3f}) ===")
+            attempt(seed=res[i][6])
     elif mode == "attempt":
         vacuum_control()
         attempt()
