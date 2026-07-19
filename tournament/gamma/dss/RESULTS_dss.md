@@ -348,3 +348,32 @@ sparse-Jacobian tooling, and the two vacuum-watershed catches as house law.
   **Δ on this substrate honestly requires AMR (D-021 — now a measured triple, not a
   policy).** The γ crown's Δ co-target moves to the N4-GPU/AMR stage with the BVP
   machinery (all-green ladder + battery + at_floor) ready to receive it.
+
+## THE N=3200 SCALING LADDER — γ lands; the fine structure is DETECTED
+
+*(`gamma_scaling_N3200.log`, `gamma_scaling_N3200.npy`: 30 runs, δp ∈ [2.5e-5, 1e-2],
+p\*(3200) = 0.03739102496155509)*
+
+- **Plain slopes at base cuts: γ[M70] = 0.3760 · γ[M65] = 0.3798 · γ[Mfrz] = 0.3668**
+  — every definition moved onto the literature 0.374(1) from N=1600's low 0.33–0.36
+  (resolution convergence, as a real scaling law must).
+- **The stability sweep caught the next trap:** sub-window fits swing 0.26–0.38 — the
+  wiggle (amplitude A, period P) modulates the LOCAL slope by ±2πA/P ≈ ±0.2, so any
+  window ≠ integer periods is phase-biased. Plain slopes over partial periods are not
+  trustworthy to better than ~±0.05 — including the pretty 0.3760.
+- **The principled uniform-grid estimator — joint fit with P FIXED by self-consistency**
+  (P = Δ/(2γ), Δ = 3.4453, iterated): asymptotic window (δp ≤ 3e-3): γ[M70] = 0.389 ·
+  γ[M65] = 0.389 · γ[Mfrz] = 0.357; **the wiggle model absorbs 4/5 of the residual
+  (rms 0.14 → 0.029) with amplitude A ≈ 0.15–0.20** — the **first in-house DETECTION
+  of the Choptuik fine structure**, at the literature-expected amplitude. (Freeing P
+  still runs away — window 0.86–1.3 periods; detection, not a period measurement,
+  consistent with the D-021 triple.) Δ-assumption sensitivity ±0.004 over Δ ∈
+  [3.35, 3.55].
+- **THE CAMPAIGN QUOTE (final, honest): γ = 0.37 ± 0.02** — direct Choptuik mass
+  scaling on the in-house evolver, N=3200, uniform grid; the ±0.02 is the spread of
+  all reasonable estimators (3 mass definitions × 2 windows × plain/wiggle-modeled),
+  which is SYMMETRIC about the literature 0.374. The contract's ±0.001 crown precision
+  remains gated on AMR/N4 (the measured triple); this measurement is the contract's
+  evolver-side redundant-recovery observable, delivered.
+- Flagged, not chased: the δp ≈ 3.6e-3 mass dip (peak-switch/wiggle-cusp candidate,
+  reproduces at both N).
