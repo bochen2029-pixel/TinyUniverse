@@ -75,6 +75,10 @@ class F:
         w = np.exp(self.inv(I0))            # integrating factor (periodic part)
         R = self.fwd(w*h)
         out = R/(P0 + 1j*self.omega)
+        # NOTE: when |mean P| is small (the SSH X-0 equation with a0~1), the DC division is
+        # near-0/0 — but for parity-constrained fields the DC is a SYMMETRY ZERO; callers
+        # must parity-project the result (an epsilon regularization here broke the SSH
+        # regularity condition — measured).
         return -self.inv(out)/w
 
 # ---------------------------------------------------------------- the field equations
@@ -88,9 +92,13 @@ def a_from_constraint(F_, ab, g, Xp, Xm, xi0, dxi0, zeta):
     Sm = Xp*Xp - Xm*Xm
     h = P*(Sp - 1.0) + Q*Sm
     f = F_.solve_periodic(P, h)
-    if f.min() < 0.03 or not np.all(np.isfinite(f)):
-        raise FloatingPointError("a_from_constraint: a^-2 nonpositive (off the physical branch)")
-    return 1.0/np.sqrt(f), (ab is None)
+    f = F_.proj(f, 0)                       # a^{-2} is EVEN-harmonic (mask includes DC)
+    if not np.all(np.isfinite(f)):
+        raise FloatingPointError("a_from_constraint: nan")
+    # off-branch excursions (f -> 0/negative) are CLAMPED, not raised: a hard cliff gives the
+    # outer LM zero gradient; a clamp turns near-branch inconsistency into a large-but-smooth
+    # matching mismatch (the true solution has f >= ~0.2 and never engages the clamp)
+    return 1.0/np.sqrt(np.maximum(f, 0.01)), (ab is None)
 
 def rhs_z(F_, g, Xp, Xm, xi0, dxi0, zeta):
     """zeta-derivatives of (g, X+, X-) with a from the constraint."""
@@ -105,23 +113,37 @@ def rhs_z(F_, g, Xp, Xm, xi0, dxi0, zeta):
     dg = (1.0 - a2)*g
     return dg, dXp, dXm, a
 
+class MarchFail(FloatingPointError):
+    """Raised when a march leaves the physical branch; carries the survived fraction s in
+    [0,1) so the residual can return a SLOPED penalty (a flat cliff gives LM zero gradient)."""
+    def __init__(self, s):
+        super().__init__(f"march failed at fraction {s:.3f}")
+        self.s = s
+
 def march(F_, g, Xp, Xm, xi0, dxi0, z0, z1, nstep, picard=4):
     """Implicit-midpoint march zeta z0 -> z1 (app D; explicit is unstable). Picard iteration
     on the midpoint state. Parity-projects each step."""
     h = (z1 - z0)/nstep
     z = z0
-    for _ in range(nstep):
-        zm = z + 0.5*h
-        gm, Xpm, Xmm = g, Xp, Xm
-        for _ in range(picard):
+    for istep in range(nstep):
+        try:
+            zm = z + 0.5*h
+            gm, Xpm, Xmm = g, Xp, Xm
+            for _ in range(picard):
+                dg, dXp, dXm, _ = rhs_z(F_, gm, Xpm, Xmm, xi0, dxi0, zm)
+                gm = g + 0.5*h*dg
+                Xpm = Xp + 0.5*h*dXp
+                Xmm = Xm + 0.5*h*dXm
             dg, dXp, dXm, _ = rhs_z(F_, gm, Xpm, Xmm, xi0, dxi0, zm)
-            gm = g + 0.5*h*dg
-            Xpm = Xp + 0.5*h*dXp
-            Xmm = Xm + 0.5*h*dXm
-        dg, dXp, dXm, _ = rhs_z(F_, gm, Xpm, Xmm, xi0, dxi0, zm)
-        g = F_.proj(g + h*dg, 0)
-        Xp = F_.proj(Xp + h*dXp, 1)
-        Xm = F_.proj(Xm + h*dXm, 1)
+            g2 = F_.proj(g + h*dg, 0)
+            Xp2 = F_.proj(Xp + h*dXp, 1)
+            Xm2 = F_.proj(Xm + h*dXm, 1)
+            if not (np.all(np.isfinite(g2)) and np.all(np.isfinite(Xp2)) and np.all(np.isfinite(Xm2))):
+                raise FloatingPointError("nan")
+            g, Xp, Xm = g2, Xp2, Xm2
+        except FloatingPointError as e:
+            if isinstance(e, MarchFail): raise
+            raise MarchFail(istep/nstep)
         z += h
     return g, Xp, Xm
 
@@ -145,11 +167,12 @@ def seed_ssh(F_, Xp0, xi0, dxi0, delta):
     algebraic, X-1 from ODE2; g(z) ~ g0 e^{-z}(D0 + D1 z)."""
     P = 1.0 + dxi0
     g0 = np.exp(-xi0)/P
-    f = F_.solve_periodic(P, P*(2.0*Xp0*Xp0 - 1.0))
+    f = F_.proj(F_.solve_periodic(P, P*(2.0*Xp0*Xp0 - 1.0)), 0)     # a0^{-2}: EVEN
     a0 = 1.0/np.sqrt(np.maximum(f, 1e-12))
     a02 = a0*a0
-    # ODE1: X-0' + P[a0^2(1/2+X+0^2)-1/2] X-0 + P X+0 = 0
-    Xm0 = F_.solve_periodic(P*(a02*(0.5 + Xp0*Xp0) - 0.5), P*Xp0)
+    # ODE1: X-0' + P[a0^2(1/2+X+0^2)-1/2] X-0 + P X+0 = 0.  X-0 is ODD-harmonic: its DC is a
+    # SYMMETRY ZERO — the solve's near-0/0 DC must be projected away (measured blowup source).
+    Xm0 = F_.proj(F_.solve_periodic(P*(a02*(0.5 + Xp0*Xp0) - 0.5), P*Xp0), 1)
     D1 = 2.0 - a02
     a1 = 0.5*a0*((1.0 - a02) + a02*(Xp0*Xp0 + Xm0*Xm0))
     D2 = 0.5*(D1*(2.0 - a02) - 2.0*a0*a1)          # D'' /2 from D' = D(2-a^2)
@@ -158,7 +181,7 @@ def seed_ssh(F_, Xp0, xi0, dxi0, delta):
     #       + P[2 a0 a1 X-0 (1/2+X+0^2) + 2 a0^2 X-0 X+0 X+1 + X+1] + (2-a0^2) X-0' = 0
     hh = P*(2.0*a0*a1*Xm0*(0.5 + Xp0*Xp0) + 2.0*a02*Xm0*Xp0*Xp1 + Xp1) \
          + (2.0 - a02)*F_.dtau(Xm0)
-    Xm1 = F_.solve_periodic(P*(-2.5 + a02*(1.5 + Xp0*Xp0)), hh)
+    Xm1 = F_.proj(F_.solve_periodic(P*(-2.5 + a02*(1.5 + Xp0*Xp0)), hh), 1)
     z = -delta
     g = g0*np.exp(-z)*(1.0 + D1*z + D2*z*z)
     Xp = Xp0 + Xp1*z
@@ -169,7 +192,7 @@ def seed_ssh(F_, Xp0, xi0, dxi0, delta):
 class Prob:
     """Unknowns: Delta; xi0 harmonics (even: c0,c2,s2*,c4,s4; s2 = 0 fixed = tau gauge);
     Y1 and X+0 harmonics (odd: c1,s1,c3,s3). Total 1 + 4 + 4 + 4 = 13."""
-    def __init__(self, M=32, zL=-6.0, delta=0.02, zm=-1.0, nstepL=100, nstepR=40):
+    def __init__(self, M=32, zL=-6.0, delta=0.02, zm=-2.0, nstepL=90, nstepR=60):
         self.M = M; self.zL = zL; self.delta = delta; self.zm = zm
         self.nstepL = nstepL; self.nstepR = nstepR
     def fields(self, u):
@@ -180,17 +203,38 @@ class Prob:
         Y1  = u[5]*np.cos(w*t) + u[6]*np.sin(w*t) + u[7]*np.cos(3*w*t) + u[8]*np.sin(3*w*t)
         Xp0 = u[9]*np.cos(w*t) + u[10]*np.sin(w*t) + u[11]*np.cos(3*w*t) + u[12]*np.sin(3*w*t)
         return F_, xi0, F_.dtau(xi0), Y1, Xp0
+    def march_right(self, F_, gR, XpR, XmR, xi0, dxi0):
+        """SSH -> zm with GEOMETRICALLY GRADED steps near zeta=0: the X- equation's
+        denominator (1-D) ~ |D1 zeta| makes the stiffness ~ 1/|zeta| — uniform steps
+        overshoot at the second node (measured)."""
+        z = -self.delta
+        while z > -0.3:
+            z2 = max(1.25*z, -0.3)          # z negative: 1.25*z steps outward geometrically
+            gR, XpR, XmR = march(F_, gR, XpR, XmR, xi0, dxi0, z, z2, 2)
+            z = z2
+        n = max(6, int((z - self.zm)/0.03))
+        return march(F_, gR, XpR, XmR, xi0, dxi0, z, self.zm, n)
+
     def residual(self, u):
+        sL = sR = 0.0
         try:
             F_, xi0, dxi0, Y1, Xp0 = self.fields(u)
             gL, XpL, XmL = seed_center(F_, Y1, xi0, dxi0, self.zL)
             gL, XpL, XmL = march(F_, gL, XpL, XmL, xi0, dxi0, self.zL, self.zm, self.nstepL)
+            sL = 1.0
             gR, XpR, XmR = seed_ssh(F_, Xp0, xi0, dxi0, self.delta)
-            gR, XpR, XmR = march(F_, gR, XpR, XmR, xi0, dxi0, -self.delta, self.zm, self.nstepR)
+            gR, XpR, XmR = self.march_right(F_, gR, XpR, XmR, xi0, dxi0)
+            sR = 1.0
             if not (np.all(np.isfinite(gL)) and np.all(np.isfinite(gR))):
                 raise FloatingPointError("march nan")
+        except MarchFail as e:
+            if sL == 0.0: sL = e.s
+            else: sR = e.s
+            return np.full(13, 8.0*(3.0 - sL - sR))    # SLOPED cliff: deeper survival = lower
         except FloatingPointError:
-            return np.full(13, 1e3)
+            return np.full(13, 24.0)
+        # (march_right's per-segment fractions make the cliff piecewise; LM needs
+        #  diff_step large enough to see it — set in attempt())
         def harm(f, parity, kmax):
             R = F_.fwd(f)/self.M
             out = []
@@ -225,6 +269,7 @@ def attempt(seed=None, M=32, verbose=True, max_nfev=600, fix_delta=False):
     t0 = time.time()
     sol = least_squares(p.residual, u0, method='trf', bounds=(lo, hi),
                         x_scale=np.concatenate([[0.1], np.full(12, 0.5)]),
+                        diff_step=0.02,     # cliff-visible finite differences (survival slope)
                         xtol=1e-14, ftol=1e-12, max_nfev=max_nfev, verbose=2 if verbose else 0)
     if verbose:
         print(f"[attempt] {time.time()-t0:.0f}s  status={sol.status}  |r|={np.linalg.norm(sol.fun):.2e}")

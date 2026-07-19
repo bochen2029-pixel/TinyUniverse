@@ -95,6 +95,10 @@ class Ev:
         t = 0.0; tG = 0.0
         snaps = []; cen = []
         istep = 0
+        # phi(0,t) must be EVOLVED (d_t phi|_0 = (al/a) Pi|_0): Phi = phi_,r cannot carry the
+        # r-independent central mode — reconstructing phi from int(Phi) pins phi(0)=0 and
+        # erases the echo signal entirely (measured: max|phi_cen| = 0.015 pre-fix).
+        phicen = 0.0
         while t < tmax:
             dPhi, dPi, a, al = self.rhs(Phi, Pi)
             w = (al/a).max()
@@ -105,6 +109,7 @@ class Ev:
             d4 = self.rhs(Phi + dt*k3P, Pi + dt*k3p);         k4P, k4p = d4[0], d4[1]
             Phi = self.ko(Phi + dt/6*(k1P + 2*k2P + 2*k3P + k4P), -1.0)
             Pi  = self.ko(Pi  + dt/6*(k1p + 2*k2p + 2*k3p + k4p), +1.0)
+            phicen += (al[0]/a[0])*Pi[0]*dt
             t += dt; tG += al[0]*dt; istep += 1
             m2r = 1.0 - 1.0/(a*a)
             if not np.all(np.isfinite(Phi)):
@@ -114,10 +119,9 @@ class Ev:
             if m2r.max() > 0.90 or al[0] < 0.02:
                 return dict(fate='bh', t=t, tG=tG, m2r=m2r.max(), snaps=snaps, cen=cen)
             if record:
-                phi = self.phi_of(Phi)
-                cen.append((tG, phi[0], al[0]))
+                cen.append((tG, phicen, al[0]))
                 if tG >= rec_tG0 and istep % stride == 0:
-                    snaps.append((tG, phi, Phi.copy(), Pi.copy(), a.copy(), al.copy()))
+                    snaps.append((tG, phicen + self.phi_of(Phi), Phi.copy(), Pi.copy(), a.copy(), al.copy()))
             # dispersal: field energy has left the inner third (decided BEFORE outer-boundary
             # reflections — my crude outer BC reflects — can re-enter; r0=12 makes the window safe)
             if t > 40.0 and m2r[:self.N//3].max() < 1e-3:
@@ -138,31 +142,51 @@ def bisect_pstar(ev, lo=0.003, hi=0.02, iters=40, verbose=True):
     return lo, hi
 
 # ---------------------------------------------------------------- echo analysis + seeding
-def analyze_echoes(cen, amin=0.05):
+def analyze_echoes(cen, amin=0.02, verbose=True):
     """t* and Delta from the geometric accumulation of phi(0,t) zero crossings:
     t*-t_n = C q^n, q = e^{-Delta/2}. Uses the LAST clean crossings (echo regime)."""
     cen = np.array(cen)                       # (tG, phi_cen, al_cen)
     tG, ph = cen[:, 0], cen[:, 1]
     s = np.sign(ph)
     ix = np.where(np.diff(s) != 0)[0]
-    # keep crossings where the local swing is a real echo (not startup noise)
     tn = []
     for i in ix:
         j0, j1 = max(0, i-40), min(len(ph), i+40)
         if np.abs(ph[j0:j1]).max() > amin:
-            # linear interp crossing time
             t0, t1, p0, p1 = tG[i], tG[i+1], ph[i], ph[i+1]
             tn.append(t0 - p0*(t1 - t0)/(p1 - p0))
     tn = np.array(tn)
-    if len(tn) < 4:
+    if verbose:
+        print(f"[echo] raw crossings={len(ix)} filtered={len(tn)}  max|phi_cen|={np.abs(ph).max():.4f}")
+        if len(tn) >= 2:
+            print(f"[echo] crossing times: {np.round(tn, 4)}")
+    if len(tn) < 3:
         return None
-    gaps = np.diff(tn)
-    # use the last few gaps with consistent geometric ratio
-    qs = gaps[1:]/gaps[:-1]
-    q = np.median(qs[-3:]) if len(qs) >= 3 else qs[-1]
-    Delta = -2.0*np.log(q)
-    tstar = tn[-1] + gaps[-1]*q/(1.0 - q)
-    return dict(tn=tn, gaps=gaps, q=q, Delta=Delta, tstar=tstar)
+    # phi(0,tau) is NON-sinusoidal (several crossings per period, unequal sub-gaps —
+    # measured), so successive-gap ratios do NOT give Delta at ~1 resolvable period.
+    # Instead: hold Delta at the literature value (the BVP refines it — that is Stage-A's
+    # job) and fit t* from SAME-PHASE crossing pairs: (t*-t_a) = e^Delta (t*-t_b).
+    Delta = 3.4453
+    eD = np.exp(Delta)
+    cands = []
+    for ia in range(len(tn)):
+        for ib in range(ia+1, len(tn)):
+            ts = (eD*tn[ib] - tn[ia])/(eD - 1.0)
+            if ts > tn[-1] + 1e-3:
+                # accept only pairs whose implied one-period partner ratio is plausible
+                Ta, Tb = ts - tn[ia], ts - tn[ib]
+                if 0.7 < np.log(Ta/Tb)/Delta < 1.3:
+                    cands.append(ts)
+    if not cands:
+        return None
+    tstar = float(np.median(cands))
+    spread = float(np.percentile(cands, 84) - np.percentile(cands, 16))
+    # honest Delta_echo estimate from the best-separated same-phase pair at the fitted t*
+    T = tstar - tn
+    Dest = [np.log(T[a]/T[b]) for a in range(len(tn)) for b in range(a+1, len(tn))
+            if 2.4 < np.log(T[a]/T[b]) < 4.4]
+    return dict(tn=tn, tstar=tstar, tstar_spread=spread, Delta=Delta,
+                Delta_echo=(float(np.median(Dest)) if Dest else float('nan')))
 
 def sample_cylinder(ev, snaps, tstar, Delta, Mtau=32, zmin=-6.0, zmax=0.8, Nz=60, tau_hi_off=0.3):
     """Sample (X, Y, g_central-gauge, a) on the (tau, zeta) cylinder over ONE period.
@@ -171,12 +195,19 @@ def sample_cylinder(ev, snaps, tstar, Delta, Mtau=32, zmin=-6.0, zmax=0.8, Nz=60
     g = a * al(0)/al  (central-lapse renormalization)."""
     s2p = np.sqrt(2*np.pi)
     ts = np.array([s[0] for s in snaps])
+    keep = ts < tstar - 1e-6
+    snaps = [s for s, k in zip(snaps, keep) if k]
+    ts = ts[keep]
     Ts = tstar - ts
-    taus_snap = np.log(np.maximum(Ts, 1e-300))
-    # pick the period where echo structure is GRID-RESOLVED: features live at r ~ T, need
-    # T >> dr; T in [2.5, 2.5 e^Delta] = the first clean echo (deeper ones are under-resolved
-    # on a uniform grid — the D-021 physics; one period is exactly what seeding needs)
-    tau1 = max(taus_snap.min() + tau_hi_off, np.log(2.5))
+    taus_snap = np.log(Ts)
+    # ONE period within the AVAILABLE T-range [~0, t*]: put its top at 0.95 t* — the
+    # period then spans T in [0.95 t* e^{-Delta}, 0.95 t*]. Small-T features live at
+    # r ~ T (resolution warning if T_lo < 6 dr — the D-021 uniform-grid physics).
+    T_hi = 0.95*tstar
+    T_lo = T_hi*np.exp(-Delta)
+    if T_lo < 6*ev.dr:
+        print(f"[cyl] WARNING: T_lo={T_lo:.3f} < 6 dr={6*ev.dr:.3f} — small-T end under-resolved")
+    tau1 = np.log(T_lo)
     tau_grid = tau1 + Delta*np.arange(Mtau)/Mtau            # one period upward
     z_grid = np.linspace(zmin, zmax, Nz)
     out = dict(tau=tau_grid, z=z_grid,
@@ -195,14 +226,12 @@ def sample_cylinder(ev, snaps, tstar, Delta, Mtau=32, zmin=-6.0, zmax=0.8, Nz=60
         out['a'][i] = aI
     return out
 
-def extract_seed(cyl, Delta, zc=-3.0):
+def extract_seed(cyl, Delta, zc=-2.0):
     """From the cylinder: Y1(tau) = e^{-zc} Y(zc,tau) (center behavior Y ~ Y1 e^z);
     xi0(tau) from e^{xi0} g(xi0-line) ~= 1 (leading order); X+0(tau) = X+ at zeta=xi0.
     Returns the nr_dss 13-vector (with the given Delta) + the raw functions."""
     tau, z = cyl['tau'], cyl['z']
     Mtau = len(tau)
-    jc = int(np.argmin(np.abs(z - zc)))
-    Y1 = np.exp(-z[jc])*cyl['Y'][:, jc]
     Xp = cyl['X'] + cyl['Y']
     xi0 = np.zeros(Mtau); Xp0 = np.zeros(Mtau)
     for i in range(Mtau):
@@ -215,6 +244,12 @@ def extract_seed(cyl, Delta, zc=-3.0):
             Xp0[i] = Xp[i, j] + frac*(Xp[i, j+1] - Xp[i, j])
         else:
             xi0[i] = z[-1]; Xp0[i] = Xp[i, -1]
+    # Y1 in the GAUGED frame: zeta_G = zeta_raw - xi0(tau); the solver's center function is
+    # Y1_G(tau) = e^{-zeta_G} Y at fixed zeta_G = zc  =>  sample raw at zc + xi0(tau)
+    Y1 = np.zeros(Mtau)
+    for i in range(Mtau):
+        zr = zc + xi0[i]
+        Y1[i] = np.exp(-zc)*np.interp(zr, z, cyl['Y'][i])
     # Fourier project (period Delta, grid = tau offsets)
     th = 2*np.pi*np.arange(Mtau)/Mtau
     def h(f, k, fn):  return 2.0/Mtau*np.sum(f*fn(k*th))
@@ -247,8 +282,8 @@ def seed_pipeline(ev, p_sub, verbose=True):
     if an is None:
         print("[seed] ECHO ANALYSIS FAILED (too few clean crossings)"); return None, dict(run=r)
     if verbose:
-        print(f"[seed] crossings={len(an['tn'])}  gaps(last4)={np.round(an['gaps'][-4:],4)}")
-        print(f"[seed] q={an['q']:.5f}  Delta_echo = {an['Delta']:.4f}   (Gundlach 3.4453)   t*={an['tstar']:.4f}")
+        print(f"[seed] crossings={len(an['tn'])}  t*={an['tstar']:.4f} (spread {an['tstar_spread']:.3f})")
+        print(f"[seed] Delta_echo(est) = {an['Delta_echo']:.3f}   (Gundlach 3.4453; seed uses the lit value)")
     cyl = sample_cylinder(ev, r['snaps'], an['tstar'], an['Delta'])
     u, fns = extract_seed(cyl, an['Delta'])
     if verbose:
