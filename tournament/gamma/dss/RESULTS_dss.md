@@ -244,5 +244,20 @@ sparse-Jacobian tooling, and the two vacuum-watershed catches as house law.
   exactly this. Mid-rungs now gate on catastrophe only (drain/vacuum/Δ-band, warns
   printed for the rest); tail shape + `at_floor` gate the FINAL. runMK v2 relaunched
   (`runMK2.log`).
+- **runMK v2 (`runMK2.log`): THE LADDER WORKS through three rungs, then names the last
+  drain route.** Progression 0.117 → 0.0735 → 0.0657 with the (64,18,17) battery
+  **fully GREEN, zero warns** (decaying lowk-dominant tail, g=[0.500,1.091]) — the
+  K-opening design is correct. Rung (64,20,21) then collapsed (|r|=1.03e-2,
+  g=[0.996,1.002]: pinned SSH coefficients held, ENTIRE INTERIOR drained). Two causes,
+  both measured: (a) the rung list double-stepped odd (17→21, skipping 19 — raw jump
+  0.72, past the ~0.5 drain threshold seen in every failure: v1 1.14, A0 1.14, r4
+  0.72 vs healthy rungs 0.24/0.49); (b) the vec pin + new-k Tikhonov leave the
+  interior OLD-k content unguarded — the third and last drain route.
+- **runMK v3 (in flight): PROXIMAL anneal** — penalty ε²|u − u_pad|² over ALL
+  coefficients (new slots are 0 in the ref, so one penalty guards both), ε: 3 → 0.3 →
+  0.03 → 0 per rung; geometrically apt: the drain directions are the near-null modes
+  (JᵀJ ~ 1e-6..1e-4) where ε² ~ 1–10 dominates, while stiff physical directions barely
+  feel it. Rung list single-steps ((64,20,19) inserted); same anneal on the Nz climbs
+  (the raw-8.3 far-jumps). Then ramp + Δ release with `at_floor`.
 - N=3200 p\* bisection hedge in flight (`pstar3200.log`) → third point for the in-house
   Δ_echo resolution series [3.216, 3.334, …] → 3.4453.

@@ -214,8 +214,11 @@ def hi_mask(rx, KE0=14, KO0=13):
         m[b + NE + NO + jo: b + NPF] = 1.0             # X- odd k > KO0
     return m
 
-def lm_tik(rx, u0, mask, eps, pin=None, freeze_delta=None, max_iter=25, rtol=1e-10, verbose=False, lam0=1e-2):
-    """LM on the AUGMENTED objective |r|^2 + eps^2 |mask*u|^2 (spectral Tikhonov).
+def lm_tik(rx, u0, mask, eps, pin=None, freeze_delta=None, max_iter=25, rtol=1e-10, verbose=False, lam0=1e-2, ref=None):
+    """LM on the AUGMENTED objective |r|^2 + eps^2 |mask*(u - ref)|^2 (ref=0: spectral
+    Tikhonov; ref=previous state: PROXIMAL anneal — the anti-drain medicine: the drain
+    directions are the near-null modes where JTJ ~ 1e-6..1e-4, so eps^2 ~ 1-10 dominates
+    exactly there while the stiff physical-residual directions barely feel it).
     Mirrors newton_drive.lm; the penalty is linear so it enters the normal equations
     analytically (no extra FD probes)."""
     from scipy.sparse import csr_matrix as _csr
@@ -224,19 +227,21 @@ def lm_tik(rx, u0, mask, eps, pin=None, freeze_delta=None, max_iter=25, rtol=1e-
     u = u0.copy()
     if freeze_delta is not None:
         u[0] = freeze_delta
+    if ref is None:
+        ref = np.zeros_like(u)
     fun = lambda uu: rx.residual(uu, pin=pin)
     r = fun(u)
     e2 = eps*eps
-    phi = lambda uu, rr: float(rr@rr + e2*np.sum((mask*uu)**2))
+    phi = lambda uu, rr: float(rr@rr + e2*np.sum((mask*(uu - ref))**2))
     lam = lam0
     p0 = phi(u, r)
     for it in range(max_iter):
         J = jac_fd(rx, R, fun, u, r)
         if freeze_delta is not None:
             keep = np.ones(rx.nu, bool); keep[0] = False
-            Jk = J[:, np.where(keep)[0]]; mk = mask[keep]; uk = u[keep]
+            Jk = J[:, np.where(keep)[0]]; mk = mask[keep]; uk = u[keep] - ref[keep]
         else:
-            Jk = J; mk = mask; uk = u
+            Jk = J; mk = mask; uk = u - ref
         JT = Jk.T.tocsr()
         JTJ = (JT@Jk).tocsc()
         g = JT@r + e2*(mk*mk*uk)
@@ -334,14 +339,17 @@ def runMK():
     rx, u = load48()
     KEp, KOp = 14, 13
     rn = None
-    for (M2, KE2, KO2) in ((64, 14, 13), (64, 16, 15), (64, 18, 17), (64, 20, 21)):
+    for (M2, KE2, KO2) in ((64, 14, 13), (64, 16, 15), (64, 18, 17), (64, 20, 19), (64, 20, 21)):
         vec = vec_of(rx, u)
         rx, u = pad_trunc(rx, u, KEp, KOp, M2, KE2, KO2)
         print(f"[MK] rung ({M2},{KE2},{KO2}): raw|r|={np.linalg.norm(rx.residual(u)):.4f}", flush=True)
-        m = hi_mask(rx, KEp, KOp)
-        for eps in ((1.0, 0.1, 0.0) if m.any() else (0.0,)):
-            for _ in range(3):
-                u, rn, st = lm_tik(rx, u, m, eps, pin=('vec', vec, 30.0), freeze_delta=LIT, max_iter=30)
+        # PROXIMAL anneal toward the padded state (runMK-v2 rung-4 lesson: the interior
+        # OLD-k content is the unguarded drain route — protect EVERYTHING, anneal to 0)
+        ref = u.copy()
+        m = np.ones(rx.nu); m[0] = 0.0
+        for eps in (3.0, 0.3, 0.03, 0.0):
+            for _ in range(2):
+                u, rn, st = lm_tik(rx, u, m, eps, pin=('vec', vec, 30.0), freeze_delta=LIT, max_iter=30, ref=ref)
                 if st != 'maxiter':
                     break
             print(f"[MK] ({M2},{KE2},{KO2}) eps={eps:g}: {st}  |r|={rn:.4e}", flush=True)
@@ -355,11 +363,14 @@ def runMK():
         rx2 = R.Relax(Nz=Nz2)
         u = R.upsample_u(rx, u, rx2); rx = rx2
         print(f"[MK] Nz={Nz2}: raw|r|={np.linalg.norm(rx.residual(u)):.4f}", flush=True)
-        for _ in range(3):
-            u, rn, st, _ = lm(rx, u, pin=('vec', vec, 30.0), freeze_delta=LIT, max_iter=30, verbose=False, lam0=1e-2)
-            if st != 'maxiter':
-                break
-        print(f"[MK] Nz={Nz2}: {st}  |r|={rn:.4e}", flush=True)
+        ref = u.copy()
+        m = np.ones(rx.nu); m[0] = 0.0
+        for eps in (3.0, 0.3, 0.03, 0.0):
+            for _ in range(2):
+                u, rn, st = lm_tik(rx, u, m, eps, pin=('vec', vec, 30.0), freeze_delta=LIT, max_iter=30, ref=ref)
+                if st != 'maxiter':
+                    break
+            print(f"[MK] Nz={Nz2} eps={eps:g}: {st}  |r|={rn:.4e}", flush=True)
         np.save('runMK_cur.npy', u)
         if not battery(rx, u, f'MK-Nz{Nz2}', rn, mid=True):
             print(f"[VERDICT] runMK broke at Nz={Nz2}. None faked.", flush=True); return
