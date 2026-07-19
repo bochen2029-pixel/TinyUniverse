@@ -8,11 +8,12 @@
 # Honesty bounds: uniform grid (D-021) — the resolvable window is δp ∈ [1e-4, 1e-2] at
 # N=1600 (smallest r_H ~ 4·dr); points under-resolved bend the tail and are visible in
 # the residuals. Fixed freeze threshold ⇒ multiplicative bias only ⇒ the slope is clean.
-# usage: python gamma_scaling.py [N] [lo] [hi] [npts]
+# usage: python gamma_scaling.py [N] [lo] [hi] [npts] [pstar]
 import numpy as np, time, sys
 from nr_evolve import Ev
 
 PSTAR = 0.03732817692976     # N=1600 (session-1 bisection, rel ~4e-14)
+# N=3200: 0.03739102496155509 (machine-precision bracket, pstar3200b.log)
 
 def main(N=1600, lo=-4.0, hi=-2.0, n_pts=26):
     ev = Ev(N=N, rmax=60.0)
@@ -30,7 +31,7 @@ def main(N=1600, lo=-4.0, hi=-2.0, n_pts=26):
         out.append((dp, res['MBH'], res['rH'], res['m2r'], m70, r70, m65, r65))
         print(f"[{i:2d}] dp={dp:.4e}: M70={m70:.5f} r70={r70:.4f} | M65={m65:.5f} | "
               f"Mfrz={res['MBH']:.5f} m2r={res['m2r']:.3f}  t={res['t']:.1f}  ({time.time()-t0:.0f}s)", flush=True)
-        np.save('gamma_scaling.npy', np.array(out))
+        np.save(f'gamma_scaling_N{N}.npy', np.array(out))
     arr = np.array(out)
 
     def fit(ycol, rcol, tag, rmin):
@@ -69,6 +70,8 @@ def main(N=1600, lo=-4.0, hi=-2.0, n_pts=26):
 
 if __name__ == "__main__":
     a = sys.argv[1:]
+    if len(a) > 4:
+        PSTAR = float(a[4])          # per-resolution p* (module global, read by main)
     main(N=int(a[0]) if len(a) > 0 else 1600,
          lo=float(a[1]) if len(a) > 1 else -4.0,
          hi=float(a[2]) if len(a) > 2 else -2.0,
