@@ -298,3 +298,23 @@ Finding: operator lacks the physical κ=2.81 eigenmode (6 methods); wall moved n
 κ, β: STILL NOT MEASURED, none faked. Operator: PROVEN (D-031). Wall: the extraction method.
 Next: HKA Lyapunov §V.G power iteration → κ → β → C++ port → fluidcss_nexus v1.0.0.
 ```
+
+---
+
+## 2026-07-19 · SESSION 4 (autonomous) — THE WALL FALLS: the background was FRIEDMANN; on the true EC background β LANDS
+
+**D-032.** The three-session wall (D-029/030/031) is closed. Chain of discovery, each step measured:
+
+1. **Lyapunov §V.G implemented** (`nr_lyap.py`): ξ=e^x uniform grid (bounds the center advection speed — HKA's "coordinate transformations"), metric slaved by vectorized integrating-factor/cumtrapz, MOL-RK4 + KO, free sonic BC, center penalty BCs. **Built-in analytic control: the gauge mode grows at 1.000047 with frozen shape.** Formulation B adds the **fifth equation** (`rflanl.tex` l.5090 — the linearized momentum constraint, an evolution equation for Ā; its eigen-form + row 0 derives eq:alg-PP: cN=c₁, com=G₃+c₁, cV=G₄+c₂ verified). One-step-map spectrum: **on the old background the discrete dynamics genuinely lack κ=2.81** — {gauge 1.0006, then decaying}.
+2. **The banked background is the collapsing flat FRIEDMANN solution, not Evans–Coleman.** Fingerprints: A=1+(2−γ)ω is the FRW radiation identity 1/(1−H²r²); oi\*=3/8=(3/2)H²t²; 2m/r=1/3=V₀²; measured **V≡−√(1−1/A) to 1.9e-10** along it. Cause: `hka_ec` used "V=−c_s" as the sonic criterion, but §IV parametrizes sonic points by FREE V₀ (4.7–4.9) and **V₀=−1/√3 IS the Friedmann point**. The gauge gate is background-blind — that is the true bottom of "necessary but not sufficient" (D-030).
+3. **The 0.35699 footnote was the fingerprint of the true background** (corrects D-031's red-herring ruling): the true EC has N̄'(sonic)=−0.355699 (the paper's 0.35699 = dropped-digit typo).
+4. **True EC built** (`nr_ec2.py`, HKA §sec-ss.practice verbatim): bisection between case1 (A<1) / case2 (second sonic) failure modes → **V₀\* = 0.112439401388**; one zero of V ✓; center-relaunch closes onto the sonic values to 6 digits ✓.
+5. **β lands.** Spectrum on EC: κ_rel = 2.8105501 / 2.8105526 / 2.8105528 (N=200/300/400; edge-standoff-insensitive 1e-2..1e-3), gauge → 1 (1.0027→1.0009), next modes Re κ ≤ −1.4.
+
+```
+kappa_0 = 2.8105526(3)   (reference 2.8105525488)
+beta    = 1/kappa = 0.3558019   (reference 0.35580192; G-ANCHOR |dbeta| ~ 1e-8 << 4e-3)
+G-CONVERGE PASS · G-UNIQUE PASS · G-ANCHOR PASS
+```
+
+**NEXT:** `nr_shoot` on the EC background (redundant recovery; expect the sonic-gauge mode at 0.3557 as a second control) → C++ Stage-A re-freeze (supersedes `b4f4e463` — Friedmann-as-EC — with an operator-signed note) + Stage-B shoot port → β golden → `fluidcss_nexus` v1.0.0.

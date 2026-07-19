@@ -1,5 +1,12 @@
 # RUN_STATE.md
 
+## SESSION 4 (2026-07-19, autonomous) — **THE β WALL FALLS: β = 0.3558019 MEASURED (D-032)**
+
+- **The three-session wall was the BACKGROUND.** The banked "Evans–Coleman" background (Stage-A golden `b4f4e463`, D-027) is actually the **collapsing flat Friedmann solution** — measured: V≡−√(1−1/A) to 1.9e-10; A=1+(2−γ)ω, oi\*=3/8, 2m/r=1/3 are all FRW radiation identities. `hka_ec` selected it by construction (sonic criterion "V=−c_s" = precisely the Friedmann point of the §IV V₀-parametrized sonic line). The gauge gate is **background-blind** — the true bottom of D-030's "necessary but not sufficient". The 0.35699 footnote was the true background's fingerprint (N̄'_EC(sonic)=−0.355699; paper typo), not a red herring — corrects D-031.
+- **True EC background built** (`nr_ec2.py`, HKA's own construction): **V₀\* = 0.112439401388**, one V-zero ✓, center-relaunch closes to 6 digits ✓.
+- **Lyapunov evolution built + validated** (`nr_lyap.py`: gauge control 1.000047 exact; fifth-equation formulation B; one-step-map spectrum). On the true EC background: **κ₀ = 2.8105526(3) (ref 2.8105525488) ⇒ β = 1/κ = 0.3558019 (ref 0.35580192)** — G-CONVERGE ✓ (N=200/300/400 + edge-standoff sweep) · G-UNIQUE ✓ (one relevant mode; gauge → 1) · **G-ANCHOR ✓ (|Δβ|≈1e-8 ≪ 4e-3)**.
+- **NEXT (in progress this session):** `nr_shoot` redundant recovery on EC → **C++ Stage-A re-freeze** (supersede `b4f4e463` with operator-signed note — it banked Friedmann-as-EC) **+ Stage-B shoot port → β golden → `fluidcss_nexus` v1.0.0**; then scalar-γ (`similarity_nexus`).
+
 ## QC PASS (2026-07-19) — full-repo verification + reconciliation
 
 - **Full harness cold: 39/39 GREEN in 1179 s** (`verify.py --build`; all 9 binaries compiled clean; contended card; log `runs/qc_harness_2026-07-19.log`). **Reality = claimed state.**
