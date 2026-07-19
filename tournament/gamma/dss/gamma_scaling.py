@@ -25,20 +25,31 @@ def main(N=1600, lo=-4.0, hi=-2.0, n_pts=26):
         if res['fate'] != 'bh':
             print(f"[{i:2d}] dp={dp:.4e}: fate={res['fate']} (SKIP)", flush=True)
             continue
-        out.append((dp, res['MBH'], res['rH'], res['m2r']))
-        print(f"[{i:2d}] dp={dp:.4e}: MBH={res['MBH']:.5f}  rH={res['rH']:.4f}  "
-              f"m2r={res['m2r']:.3f}  t={res['t']:.1f}  ({time.time()-t0:.0f}s)", flush=True)
+        r65, m65 = res['cross'].get(0.65, (np.nan, np.nan))
+        r70, m70 = res['cross'].get(0.70, (np.nan, np.nan))
+        out.append((dp, res['MBH'], res['rH'], res['m2r'], m70, r70, m65, r65))
+        print(f"[{i:2d}] dp={dp:.4e}: M70={m70:.5f} r70={r70:.4f} | M65={m65:.5f} | "
+              f"Mfrz={res['MBH']:.5f} m2r={res['m2r']:.3f}  t={res['t']:.1f}  ({time.time()-t0:.0f}s)", flush=True)
         np.save('gamma_scaling.npy', np.array(out))
     arr = np.array(out)
-    x = np.log(arr[:, 0]); y = np.log(arr[:, 1])
-    A = np.vstack([x, np.ones_like(x)]).T
-    coef, *_ = np.linalg.lstsq(A, y, rcond=None)
-    gam = coef[0]
-    resid = y - A@coef
-    rms = float(np.sqrt(np.mean(resid**2)))
-    print(f"\n*** gamma_scaling = {gam:.4f}   (lit 0.374(1); {len(x)} pts, "
-          f"lnM rms resid {rms:.4f}) ***", flush=True)
-    # fine structure: periodic residual in x = ln(dp), period P = Delta/(2 gamma)
+
+    def fit(ycol, rcol, tag, rmin):
+        m = np.isfinite(arr[:, ycol]) & (arr[:, rcol] >= rmin)
+        x = np.log(arr[m, 0]); y = np.log(arr[m, ycol])
+        A = np.vstack([x, np.ones_like(x)]).T
+        coef, *_ = np.linalg.lstsq(A, y, rcond=None)
+        resid = y - A@coef
+        rms = float(np.sqrt(np.mean(resid**2)))
+        print(f"*** gamma[{tag}] = {coef[0]:.4f}   (lit 0.374(1); {int(m.sum())} pts "
+              f"rH>={rmin:g}, lnM rms {rms:.4f}) ***", flush=True)
+        return x, resid, coef[0]
+
+    rmin = 8*ev.dr        # grid-resolvability floor (measured: rH quantizes below ~8 dr)
+    print(f"\n[fit] resolvability cut rH >= 8*dr = {rmin:.3f}", flush=True)
+    x, resid, gam = fit(4, 5, 'M70', rmin)
+    fit(6, 7, 'M65', rmin)
+    fit(1, 2, 'Mfrz', rmin)
+    # fine structure on the uniform-trigger series: period P = Delta/(2 gamma) in ln(dp)
     best = None
     for P in np.linspace(2.0, 8.0, 601):
         B = np.vstack([np.cos(2*np.pi*x/P), np.sin(2*np.pi*x/P), np.ones_like(x)]).T
@@ -48,7 +59,7 @@ def main(N=1600, lo=-4.0, hi=-2.0, n_pts=26):
         if best is None or sc < best[1]:
             best = (P, sc, float(np.hypot(cf[0], cf[1])))
     P, _, amp = best
-    print(f"*** fine-structure: best period in ln(dp) = {P:.3f}  ->  Delta = 2*gamma*P = "
+    print(f"*** fine-structure[M70]: best period in ln(dp) = {P:.3f}  ->  Delta = 2*gamma*P = "
           f"{2*gam*P:.3f}   (lit 3.4453; wiggle amplitude {amp:.4f}; window holds "
           f"{(x.max()-x.min())/P:.2f} periods) ***", flush=True)
 

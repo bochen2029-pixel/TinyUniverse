@@ -95,6 +95,9 @@ class Ev:
         t = 0.0; tG = 0.0
         snaps = []; cen = []
         istep = 0
+        cross = {}          # first-crossing (rH, m) at fixed 2m/r thresholds — a UNIFORM
+                            # mass observable for the scaling law (the freeze fires on two
+                            # different triggers across p: a p-DEPENDENT bias, measured)
         # phi(0,t) must be EVOLVED (d_t phi|_0 = (al/a) Pi|_0): Phi = phi_,r cannot carry the
         # r-independent central mode — reconstructing phi from int(Phi) pins phi(0)=0 and
         # erases the echo signal entirely (measured: max|phi_cen| = 0.015 pre-fix).
@@ -114,15 +117,20 @@ class Ev:
             m2r = 1.0 - 1.0/(a*a)
             if not np.all(np.isfinite(Phi)):
                 return dict(fate='nan', t=t, tG=tG, snaps=snaps, cen=cen)
+            mx = m2r.max()
+            # thresholds BELOW the observed freeze floor (min m2r-at-freeze = 0.74 across
+            # the p-ladder: the lapse collapses before 2m/r climbs for mid-size BHs) —
+            # every collapsing run crosses these => a truly uniform mass observable
+            for thr in (0.65, 0.70):
+                if thr not in cross and mx >= thr:
+                    j = int(np.argmax(m2r))
+                    cross[thr] = (float(self.r[j]), float(0.5*self.r[j]*m2r[j]))
             # polar slicing freezes asymptotically (measured: m2r hovers ~0.95, alpha(0)~1e-2,
             # then breaks down numerically) — detect the freeze, not the unreachable limit
-            if m2r.max() > 0.90 or al[0] < 0.02:
-                # mass at freeze for the Choptuik scaling law: m(r) = (r/2)(1-1/a^2) at the
-                # outermost 2m/r peak (the frozen near-horizon). Fixed threshold across p
-                # => a p-independent multiplicative bias => the log-log SLOPE (gamma) is clean.
+            if mx > 0.90 or al[0] < 0.02:
                 j = int(np.argmax(m2r))
-                return dict(fate='bh', t=t, tG=tG, m2r=m2r.max(), snaps=snaps, cen=cen,
-                            rH=float(self.r[j]), MBH=float(0.5*self.r[j]*m2r[j]))
+                return dict(fate='bh', t=t, tG=tG, m2r=mx, snaps=snaps, cen=cen,
+                            rH=float(self.r[j]), MBH=float(0.5*self.r[j]*m2r[j]), cross=cross)
             if record:
                 cen.append((tG, phicen, al[0]))
                 if tG >= rec_tG0 and istep % stride == 0:
