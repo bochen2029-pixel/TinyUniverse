@@ -377,6 +377,21 @@ def runMK():
     u, verdict = ramp_release(rx, u, lowk_amp(rx, u), 'runMK')
     print(f"[runMK] verdict: {verdict}  ({time.time()-t00:.0f}s)", flush=True)
 
+def polish():
+    """Pure damped Newton from the best-ever state (runMK_final: full basis, all-green,
+    |r|=7.9e-2). LM's damping crawls in the curved flat valley; if the proximal ladder
+    delivered us inside the Newton basin, full steps punch through. Free Delta — if it
+    descends, Delta converges to its measured value in the same solve."""
+    R.configure(64, 20, 21)
+    rx = R.Relax(Nz=60)
+    u = np.load('runMK_final.npy')
+    print(f"[polish] start |r|={np.linalg.norm(rx.residual(u)):.4e}  Delta={u[0]:.7f}", flush=True)
+    from newton_drive import newton
+    u, rn, st, _ = newton(rx, u, pin=None, freeze_delta=None, max_iter=15, verbose=True)
+    np.save('polish.npy', u)
+    battery(rx, u, 'polish-FINAL', rn)
+    print(f"[polish] {st}  |r|={rn:.4e}  Delta={u[0]:.7f}", flush=True)
+
 def nzprobe():
     """Plateau vs Nz — the decisive discrimination for the 7.9e-2 plateau at (48,14,13):
     if the plateau DROPS as Nz rises, the z-discretization is inconsistent at Nz=40 (the
@@ -400,4 +415,4 @@ def nzprobe():
 
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else 'smoke'
-    {'smoke': smoke, 'run': run, 'run48': run48, 'nzprobe': nzprobe, 'runA': runA, 'runMK': runMK}[mode]()
+    {'smoke': smoke, 'run': run, 'run48': run48, 'nzprobe': nzprobe, 'runA': runA, 'runMK': runMK, 'polish': polish}[mode]()

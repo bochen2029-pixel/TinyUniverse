@@ -261,3 +261,33 @@ sparse-Jacobian tooling, and the two vacuum-watershed catches as house law.
   (the raw-8.3 far-jumps). Then ramp + Δ release with `at_floor`.
 - N=3200 p\* bisection hedge in flight (`pstar3200.log`) → third point for the in-house
   Δ_echo resolution series [3.216, 3.334, …] → 3.4453.
+
+## SESSION 6 CLOSE OF THE BVP CAMPAIGN — the wall, isolated exactly; the pivot
+
+- **runMK v3 (`runMK3.log`, 1739 s): THE DRAIN IS FULLY DEFEATED — and the wall stands
+  alone.** All 5 K-rungs GREEN, both Nz climbs GREEN, full pin ramp GREEN, Δ release
+  survived — g = [0.520, 1.058] end-to-end, decaying lowk-dominant tails at full
+  (64,20,21)×Nz60. **Structure preservation through joint refinement: SOLVED** (proximal
+  anneal + vector pin + single-step rungs). But every solve exits `maxiter` crawling
+  (~0.03%/30 its), final |r| = 7.94e-2 ≫ the 5e-3 floor, released Δ drifts +1.2e-6 ⇒
+  `at_floor` correctly kills the claim. Verdict: released-fail, honest.
+- **Newton polish (`polish.log`): instant stall** — the full Newton step and every
+  backtrack fraction INCREASE |r|; the state is not in the Newton basin. Seventh solver
+  formulation to hit the same ~0.08 plateau (LM, exact-Newton, trf, log-g LM, Tikhonov,
+  proximal, Newton-polish).
+- **THE BVP WALL, named precisely:** healthy structure is preserved and refined at will;
+  DESCENT itself is blocked — the valley's near-null directions (cond ≥ 1e6) carry
+  gradient signal at/below FD-Jacobian noise, and the residual floor ~0.08 is
+  solution-shape information the extraction-built seed never carried. Remaining BVP
+  levers (unspent): complex-step Jacobian (needs rfft→fft complex-safe rewrite),
+  extraction rebuilt AT full resolution from N=1600 (recipe #1, never fully done), and
+  ultimately the C++/AMR port. **Δ NOT measured by the BVP, none faked.**
+- **THE PIVOT — the direct classic route (`gamma_scaling.py`, in flight):** Choptuik
+  mass scaling M_BH ∝ (p−p\*)^γ on the SAME validated evolver (p\* to 1e-14, N=1600),
+  26 supercritical runs δp ∈ [1e-4, 1e-2]: **γ = the log-log slope** (lit 0.374) and
+  the **fine-structure wiggle** (period Δ/(2γ) in ln δp, Gundlach/Hod–Piran) = an
+  independent Δ handle. No BVP needed. Honesty bounds pre-declared: uniform grid
+  (D-021) sets the resolvable window (r_H ≳ 4·dr); fixed freeze threshold ⇒
+  multiplicative bias only ⇒ the slope is clean; under-resolved tail points bend
+  visibly in the residuals. Plus the N=3200 p\* bisection → Δ_echo point #3 →
+  the [3.216, 3.334, …] resolution series toward 3.4453.

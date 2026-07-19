@@ -117,7 +117,12 @@ class Ev:
             # polar slicing freezes asymptotically (measured: m2r hovers ~0.95, alpha(0)~1e-2,
             # then breaks down numerically) — detect the freeze, not the unreachable limit
             if m2r.max() > 0.90 or al[0] < 0.02:
-                return dict(fate='bh', t=t, tG=tG, m2r=m2r.max(), snaps=snaps, cen=cen)
+                # mass at freeze for the Choptuik scaling law: m(r) = (r/2)(1-1/a^2) at the
+                # outermost 2m/r peak (the frozen near-horizon). Fixed threshold across p
+                # => a p-independent multiplicative bias => the log-log SLOPE (gamma) is clean.
+                j = int(np.argmax(m2r))
+                return dict(fate='bh', t=t, tG=tG, m2r=m2r.max(), snaps=snaps, cen=cen,
+                            rH=float(self.r[j]), MBH=float(0.5*self.r[j]*m2r[j]))
             if record:
                 cen.append((tG, phicen, al[0]))
                 if tG >= rec_tG0 and istep % stride == 0:
