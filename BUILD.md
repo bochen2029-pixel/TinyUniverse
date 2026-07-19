@@ -26,7 +26,7 @@ cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Bu
 
 Mirrors ORRERY D-021: **fat binary** — sm_89 + sm_90 SASS, compute_120 PTX (forward JIT) · static cudart + static MSVC runtime (self-contained dist, Buddhabrot pattern) · `--use_fast_math` **banned** in declared paths · goldens stay hardware-pinned to sm_89 (re-baseline = operator-signed note in goldens/).
 
-App dependencies via FetchContent (Buddhabrot-proven set): GLFW 3.4, GLAD v2, Dear ImGui 1.91, stb. Vulkan SDK: required from M1 — pin exact version in this file at M1 (D-002/Q-005).
+App dependencies via FetchContent (Buddhabrot-proven set): GLFW 3.4, GLAD v2, Dear ImGui 1.91, stb. **Vulkan SDK: 1.4.350.0 — PINNED (installed 2026-07-19 via winget, D-034; `C:\VulkanSDK\1.4.350.0`, `VULKAN_SDK` machine env set; the RTX 4070 Ti SUPER enumerates at API 1.4.341, driver 610.47; the Intel iGPU ALSO enumerates — R0 device selection must pick the discrete card).** Vulkan link line (R0+): `/I"%VULKAN_SDK%\Include"` + `"%VULKAN_SDK%\Lib\vulkan-1.lib"`.
 
 ## OptiX (M5)
 
