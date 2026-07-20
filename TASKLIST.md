@@ -125,8 +125,17 @@ Status legend: ☐ planned · ◐ in progress · ☑ done (golden frozen) · ✖
 - ☑ Contract `contracts/interop.contract.md` v1.0.0 (approved via "keep going and proceed to next"; Q-R0-1..3 resolved as recommended); module `render/interop.cu` (single file, nvcc + vulkan-1.lib)
 - ☑ The mechanism proven ALL-GREEN first run: shared `VkBuffer` exported OPAQUE_WIN32 → `cudaImportExternalMemory` (zero-copy); two exported TIMELINE semaphores; LUID-matched device pick; validation layers ON with **0 errors / 0 warnings**; G-ROUNDTRIP byte-identity; G-SYNC 240 strictly-monotonic embedded counters
 - ☑ Golden `interop_r0` `4ba7fbcb` frozen (two-passed, ~1.2 s); windowed face smoke-verified live ("the sim breathes": CUDA pattern → swapchain at vsync)
-- ☐ **R1 `cinematic` next** — port the GARGANTUA HDR → mip-bloom → AgX/ACES stack onto this path (CINEMATIC.md binds from R1); then R2 wires the substrate
+- ☑ **R1 `cinematic` CLOSED 2026-07-19** (same session) — see the R1 section below
 - **Gate: MET** — a live Vulkan window presents CUDA pixels zero-copy with correct sync, and the headless face proves it byte-exactly under validation layers.
+
+### R1 · `cinematic` — the CINEMATIC law binds ☑ **CLOSED 2026-07-19** (judged half ⏸ operator sign-off)
+- ☑ Contract `contracts/cinematic.contract.md` v1.0.0 (operator picked SUPERNOVA: "okay try supernova first … proceed"); module `render/cinematic.cu`
+- ☑ The full §1 chain: fp32 linear HDR → 6-mip threshold-free bloom (CoD 13-tap/tent) → EV auto-exposure → minimal-AgX (ACES parity on `T`) → astro-stretch W=40 + grain 0.3% (cinematic mode) → triangular dither → single sRGB → BGRA (R0 swizzle fixed)
+- ☑ **The exposure-meter saga, measured twice**: percentile 2–98% blind to the flash (bin-0 sky domination → EV pinned −15.94; lit-only percentile still robust-against-the-flash → moved 0.03) ⇒ **energy-weighted astro meter** (key = ΣE·log₂L/ΣE) → EV moves 4.30 across the flash — the camera is demonstrably blinded and re-adapts (contract freeze amendment)
+- ☑ KAT selftest 6/6 (blackbody triples · AgX monotone · sRGB 2e-6 · dither stats 4σ); golden `cinematic_r1` `4962558c` two-passed (~2.4 s); `--shot` flash/decay frames delivered to the operator
+- ☐ **⏸ judged §7 boxes**: operator sign-off on the look (flash/decay shots + the live window) — record here when given
+- ☐ R2 next: wire the SUBSTRATE into this pipeline (the universe renders through its own post-chain); wheel-zoom/crossfade/manual-EV polish
+- **Gate: mechanical MET** (all structural boxes golden-pinned); judged half awaits the operator per the contract's split.
 
 ### N4 (GPU, future — gated against N0 + the 21 v1 goldens)
 - ☐ N4 `star` (fusion closure + radiation + Ratchet lattice — the hydrogen-ball sentence)

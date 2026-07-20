@@ -16,6 +16,7 @@ BUILDS = [
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\\fluidcss_nexus.cpp /Fe:build\\fluidcss_nexus.exe /Fo:build\\fluidcss_nexus.obj',   # crown Stage-A (fluid CSS, CPU)
     f'{VCVARS} >nul 2>&1 && cl /std:c++17 /EHsc /O2 /W4 /nologo substrate\\choptuik_nexus.cpp /Fe:build\\choptuik_nexus.exe /Fo:build\\choptuik_nexus.obj',   # gamma crown: direct mass scaling (CPU)
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -o build\\interop.exe render\\interop.cu -I"C:\\VulkanSDK\\1.4.350.0\\Include" "C:\\VulkanSDK\\1.4.350.0\\Lib\\vulkan-1.lib" user32.lib',   # R0 interop (Vulkan+CUDA)
+    f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -o build\\cinematic.exe render\\cinematic.cu -I"C:\\VulkanSDK\\1.4.350.0\\Include" "C:\\VulkanSDK\\1.4.350.0\\Lib\\vulkan-1.lib" user32.lib',   # R1 cinematic (supernova)
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\tinyuniverse.exe app\\tinyuniverse.cu core\\lib\\envelope.cpp user32.lib gdi32.lib opengl32.lib cufft.lib',
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\field_nexus.exe substrate\\field_nexus.cu cufft.lib',   # v2 N1 (SP field)
     f'{VCVARS} >nul 2>&1 && nvcc -O3 -arch=sm_89 -Xcompiler "/O2" -o build\\lapse_nexus.exe substrate\\lapse_nexus.cu cufft.lib',   # v2 N2 (lapse/clock)
@@ -64,6 +65,13 @@ CHOPTUIK_GOLDENS = [
 # GPU-bound -> behind the preflight with the other GPU goldens.
 INTEROP_GOLDENS = [
     ("interop_r0", [r"build\interop.exe", "--headless", "--frames", "240", "--golden"]),
+]
+# R1 cinematic (contracts/cinematic.contract.md v1.0.0): the full CINEMATIC post-chain
+# (fp32 HDR -> mip bloom -> energy-weighted EV auto-exposure -> AgX -> dither -> sRGB)
+# on the R0 path; SUPERNOVA scene. Gates: range >= 2^10 in-frame, exposure adaptation
+# demonstrably moves, validation clean, LUID.
+CINEMATIC_GOLDENS = [
+    ("cinematic_r1", [r"build\cinematic.exe", "--headless", "--frames", "240", "--golden"]),
 ]
 GOLDENS = [
     ("kepler",    [r"build\tinyuniverse.exe", "--scenario", "kepler",    "--golden"]),
@@ -176,7 +184,9 @@ def main():
         red += run_goldens(LAPSE_GOLDENS)
         print("[gpu] R0 interop golden:")
         red += run_goldens(INTEROP_GOLDENS)
-    n = len(CPU_GOLDENS) + len(CURVE_GOLDENS) + len(INSPIRAL_GOLDENS) + len(PRECESSION_GOLDENS) + len(FLUIDCSS_GOLDENS) + len(CHOPTUIK_GOLDENS) + ((len(GOLDENS) + len(FIELD_GOLDENS) + len(LAPSE_GOLDENS) + len(INTEROP_GOLDENS)) if gpu_ok else 0)
+        print("[gpu] R1 cinematic golden:")
+        red += run_goldens(CINEMATIC_GOLDENS)
+    n = len(CPU_GOLDENS) + len(CURVE_GOLDENS) + len(INSPIRAL_GOLDENS) + len(PRECESSION_GOLDENS) + len(FLUIDCSS_GOLDENS) + len(CHOPTUIK_GOLDENS) + ((len(GOLDENS) + len(FIELD_GOLDENS) + len(LAPSE_GOLDENS) + len(INTEROP_GOLDENS) + len(CINEMATIC_GOLDENS)) if gpu_ok else 0)
     print("-"*40)
     if not gpu_ok:                              # CPU oracles still reported; GPU suite deferred
         print(f"  CPU {'ALL GREEN' if red==0 else f'{red} RED'}; GPU goldens SKIPPED "

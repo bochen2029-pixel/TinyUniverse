@@ -36,6 +36,12 @@ cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Bu
 
 (Explicit SDK path — shells predating the install lack the `VULKAN_SDK` env var.)
 
+R1 `cinematic` (same link line, different source):
+
+```
+cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1 && nvcc -O3 -arch=sm_89 -o build\cinematic.exe render\cinematic.cu -I"C:\VulkanSDK\1.4.350.0\Include" "C:\VulkanSDK\1.4.350.0\Lib\vulkan-1.lib" user32.lib'
+```
+
 ## OptiX (M5)
 
 Function-table dispatch via `optix_stubs.h` (`optixInit()` pulls `nvoptix.dll` from the driver — **no .lib link**). CMake auto-detects the SDK at `C:/ProgramData/NVIDIA Corporation/OptiX SDK 9.1.0/include`; if absent, the OptiX path is compiled out and the renderer falls back to the CUDA-compute geodesic path. The app must never *require* the SDK. (Buddhabrot v4 recipe, verbatim.)

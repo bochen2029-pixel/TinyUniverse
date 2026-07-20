@@ -28,3 +28,36 @@ no resize, no HDR; Windows + discrete-NVIDIA only; the windowed blit puts RGBA b
 a BGRA swapchain image (R/B swap visible in the test pattern — an accepted R0
 cosmetic, exact swizzle lands with the R1 CINEMATIC port; the DECLARED headless path
 is byte-exact and swapchain-free). CINEMATIC.md binds from R1, not R0.
+
+# MODULE — cinematic (R1: the CINEMATIC post-chain, SUPERNOVA scene)
+
+**Purpose.** The full CINEMATIC §1 pipeline on the R0 path: fp32 linear accumulation
+(≥RGBA16F floor) → mip-chain threshold-free bloom (CoD 13-tap down / 3×3 tent up, 6
+mips) → **energy-weighted log₂-luminance auto-exposure** (EV, tick-smoothed τ=90; the
+astro meter — see the contract's freeze amendment for the two measured failures of the
+percentile meter) → minimal-AgX tone map (ACES-Narkowicz parity on `T`) → cinematic
+mode: astro-stretch W=40 + grain 0.3% → triangular dither → the ONLY sRGB encode →
+BGRA pack (the R0 swizzle fixed). Scene: ~2500 counter-hashed blackbody stars
+(Tanner–Helland, 2.2-linearized) + the SUPERNOVA (star 0: ×10⁵ hot-blue flash →
+cooling decay, 1200-tick loop, pure function of the tick). Splats are analytic
+gaussians σ=1.35 px (band-limited — the R1 AA resolution). NO float atomics in the
+declared path (fixed-order per-pixel gather; histogram = integer atomics).
+**Contract:** `contracts/cinematic.contract.md` v1.0.0 (FROZEN). **Oracle:** KAT
+selftest (blackbody triples · AgX monotone/range · sRGB roundtrip 2e-6 · triangular
+dither statistics at 4σ) + validation layers + the structural gates.
+**Golden (1/1, GPU):** `cinematic_r1` `4962558c` (`--headless --frames 240 --golden`,
+~2.4 s: G-RANGE 2^25.75 ≥ 2^10 · G-EXPOSURE EV moved 4.30 ≥ 1.5 across the flash ·
+G-VALIDATION 0/0 · LUID). `--shot` frames: `runs/r1_supernova_flash.png` (blinding) +
+`runs/r1_supernova_decay.png` (after-flash blindness re-adapting) — the judged half.
+Windowed face: drag-orbit (critically-damped spring k=10, §5), `T` AgX/ACES/raw-clamp,
+`C` cinematic/physical, `D` dither, HUD (minimal 5×7 font), title shows SN phase + EV.
+
+```
+nvcc -O3 -arch=sm_89 -o build\cinematic.exe render\cinematic.cu -I"C:\VulkanSDK\1.4.350.0\Include" "C:\VulkanSDK\1.4.350.0\Lib\vulkan-1.lib" user32.lib
+```
+
+**Honest boundary:** synthetic (physical-blackbody) scene — the substrate arrives at
+R2 with pipeline + golden retained; fixed 1280×720; AA = band-limited splats (TAA/DLSS
+at the DLSS milestone); LUT grading deferred; wheel-zoom and crossfade deferred (single
+scene, fixed distance); manual-EV keys deferred to the R2 polish (auto + the C/T/D
+toggles ship now). The judged §7 boxes await operator sign-off (recorded in TASKLIST).

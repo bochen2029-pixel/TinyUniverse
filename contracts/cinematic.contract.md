@@ -1,7 +1,15 @@
 # cinematic.contract.md — `cinematic` (R1: the CINEMATIC post-chain on the interop path)
 
-**Version 0.1.0 — DRAFT · ⏸ OPERATOR REVIEW REQUIRED before any module source**
-(contract-first hard rule). Basis: `CINEMATIC.md` (the rendering law — binds from R1
+**Version 1.0.0 — FROZEN** (approved 2026-07-19, operator: "okay try supernova first
+… proceed" [scene pick + green-light]; frozen with golden `cinematic_r1` `4962558c…`,
+two-passed same day; `--shot` frames delivered for the judged half of G-CHECKLIST).
+**Amendment at freeze (measured, two steps):** the §4 exposure meter for astro
+content is **energy-weighted** (key = ΣE·log₂L/ΣE over lit bins) — the percentile
+2–98% meter was blind to the flash twice (bin-0 sky domination, then
+percentile-robustness against small bright regions, EV moved 0.03); a camera is
+blinded by a point flash because the flash carries the frame's ENERGY. The
+percentile form remains right for non-astro scenes; the meter choice is per-scene
+and declared. Basis: `CINEMATIC.md` (the rendering law — binds from R1
 by design) · R0 `interop` v1.0.0 (the proven presentation path, golden `4ba7fbcb`) ·
 the M1 canvas stack in `app/tinyuniverse.cu` (CINEMATIC 10/10, the LIFT SOURCE) ·
 GARGANTUA `C:\blackhole\files\blackhole.cu` (the reference implementation).
@@ -78,13 +86,22 @@ inherits R0's FIFO vsync; pacing non-declared (frame contract).
 Headless face only: tick-parameterized scene and adaptation (NO wall-clock), fixed
 frame count, single queue, house blake2b. Windowed face non-declared.
 
-## Open questions for review
+## Open questions — RESOLVED at approval
 
-- Q-R1-1: scene content — proposed: ~2000 blackbody stars (T ∈ [3200, 11000] K, §2
-  weighting) + one 10⁴× "sun" on a slow orbit (exercises bloom streaking + exposure
-  swings). Alternative: lift the app's galaxy point cloud directly.
-- Q-R1-2: AgX implementation — Blender-4.x-parity polynomial (portable, KAT-able) vs
-  the app's existing AgX (if present; MODULE.md will record which the M1 stack used).
-- Q-R1-3: does the R1 golden pin the mid-pipeline RGBA16F hash too (stronger
-  regression surface, bigger hash churn on tuning) or only the final 8-bit frames
-  (recommended — tuning the look shouldn't re-freeze physics-free intermediates)?
+- Q-R1-1 → **the SUPERNOVA scene** (operator's pick): ~2500 counter-hashed blackbody
+  stars (T ∈ [3200, 11000] K cool-weighted, lognormal-ish L) as the backdrop; star 0
+  is the progenitor — light curve quiescent → ×10⁵ flash (hot blue ~15000 K) →
+  cooling power-law decay, all pure functions of the tick, looping. The flash IS the
+  G-RANGE source and the exposure-adaptation demo. (The other brainstormed presets —
+  inspiral, Choptuik-breathing, ladder — join later as windowed-face additions,
+  non-declared, no contract churn.)
+- Q-R1-2 → minimal-AgX polynomial (portable, KAT-able); ACES-Narkowicz as the
+  GARGANTUA-parity mode on the T key.
+- Q-R1-3 → the golden pins ONLY the final packed 8-bit frames (+ declared EV values);
+  fp intermediates stay unfrozen so look-tuning doesn't churn goldens.
+- Amendment (AA box): satisfied at R1 by **analytic band-limited splats** (gaussian
+  footprint σ ≥ 1.2 px — the shimmer the checklist bans comes from sub-pixel point
+  sprites; band-limited splats cannot alias). SSAA/TAA/DLSS remain the upgrade path,
+  declared not skipped.
+- Amendment (precision): the linear HDR intermediates are fp32 (`float4`) — strictly
+  exceeds the RGBA16F floor of §7 box 1; declared in MODULE.md.
